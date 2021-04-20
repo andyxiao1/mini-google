@@ -13,6 +13,7 @@ import org.apache.logging.log4j.LogManager;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import edu.upenn.cis.cis455.crawler.utils.CrawlerState;
 import edu.upenn.cis.stormlite.OutputFieldsDeclarer;
 import edu.upenn.cis.stormlite.TopologyContext;
 import edu.upenn.cis.stormlite.bolt.IRichBolt;
@@ -95,6 +96,10 @@ public class SenderBolt implements IRichBolt {
 
         log.debug("Sender is routing " + tuple.toString() + " from " + tuple.getSourceExecutor() + " to "
                 + url.toString());
+
+        if (CrawlerState.isShutdown) {
+            return;
+        }
 
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setDoOutput(true);

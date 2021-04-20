@@ -9,6 +9,7 @@ import java.util.UUID;
 
 import static edu.upenn.cis.cis455.crawler.utils.Constants.*;
 
+import edu.upenn.cis.cis455.crawler.utils.CrawlerState;
 import edu.upenn.cis.cis455.crawler.utils.HTTP;
 import edu.upenn.cis.cis455.crawler.utils.Security;
 import edu.upenn.cis.cis455.storage.DatabaseEnv;
@@ -77,8 +78,7 @@ public class DocumentFetcherBolt implements IRichBolt {
         String url = input.getStringByField("url");
         logger.info(getExecutorId() + " received " + url);
 
-        if (url == null) {
-            collector.emit(new Values<Object>(null, null, null, null), getExecutorId());
+        if (CrawlerState.isShutdown) {
             return true;
         }
 

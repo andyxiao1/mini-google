@@ -6,6 +6,7 @@ import java.util.UUID;
 import static edu.upenn.cis.cis455.crawler.utils.Constants.*;
 
 import edu.upenn.cis.cis455.crawler.CrawlerQueue;
+import edu.upenn.cis.cis455.crawler.utils.CrawlerState;
 import edu.upenn.cis.cis455.storage.DatabaseEnv;
 import edu.upenn.cis.cis455.storage.StorageFactory;
 import edu.upenn.cis.stormlite.OutputFieldsDeclarer;
@@ -62,6 +63,10 @@ public class LinkFilterBolt implements IRichBolt {
     public boolean execute(Tuple input) {
         String url = input.getStringByField("url");
         logger.info(getExecutorId() + " received " + url);
+
+        if (CrawlerState.isShutdown) {
+            return true;
+        }
 
         if (database.containsUrl(url)) {
             logger.info(url + ": url seen before");

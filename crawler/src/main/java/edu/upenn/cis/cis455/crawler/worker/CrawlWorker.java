@@ -13,6 +13,7 @@ import org.apache.logging.log4j.Logger;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import edu.upenn.cis.cis455.crawler.CrawlerQueue;
+import edu.upenn.cis.cis455.crawler.utils.CrawlerState;
 import edu.upenn.cis.cis455.storage.DatabaseEnv;
 import edu.upenn.cis.cis455.storage.StorageFactory;
 import edu.upenn.cis.stormlite.Config;
@@ -157,6 +158,8 @@ public class CrawlWorker {
 
     private void shutdown() {
         System.out.println(database);
+        System.out.println("Crawl Count: " + CrawlerState.count);
+        CrawlerState.isShutdown = true;
         cluster.killTopology("");
         cluster.shutdown();
         stop();

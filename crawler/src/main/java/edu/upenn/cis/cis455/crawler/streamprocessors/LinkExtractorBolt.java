@@ -5,6 +5,7 @@ import java.util.UUID;
 
 import static edu.upenn.cis.cis455.crawler.utils.Constants.*;
 
+import edu.upenn.cis.cis455.crawler.utils.CrawlerState;
 import edu.upenn.cis.cis455.storage.DatabaseEnv;
 import edu.upenn.cis.cis455.storage.StorageFactory;
 import edu.upenn.cis.stormlite.OutputFieldsDeclarer;
@@ -74,6 +75,10 @@ public class LinkExtractorBolt implements IRichBolt {
         boolean isCachedVersion = (boolean) input.getObjectByField("isCachedVersion");
 
         logger.info(getExecutorId() + " received document for " + url);
+
+        if (CrawlerState.isShutdown) {
+            return true;
+        }
 
         // If not already cached, store document in index.
         if (!isCachedVersion) {

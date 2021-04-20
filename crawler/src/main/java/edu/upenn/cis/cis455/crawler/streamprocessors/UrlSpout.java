@@ -83,7 +83,7 @@ public class UrlSpout implements IRichSpout {
     @Override
     public boolean nextTuple() {
 
-        if (queue.isEmpty() || CrawlerState.isFinished) {
+        if (queue.isEmpty() || CrawlerState.isShutdown) {
             return true;
         }
 
