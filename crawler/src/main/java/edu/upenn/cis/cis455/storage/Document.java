@@ -7,13 +7,10 @@ import com.sleepycat.persist.model.PrimaryKey;
 import com.sleepycat.persist.model.Relationship;
 import com.sleepycat.persist.model.SecondaryKey;
 
-@Entity
 public class Document {
 
-    @PrimaryKey(sequence = "docId")
     public int id;
 
-    @SecondaryKey(relate = Relationship.ONE_TO_ONE)
     public String url;
 
     public String content;
@@ -32,6 +29,14 @@ public class Document {
 
     public void setContent(String documentContent) {
         content = documentContent;
+    }
+    
+    public String getUrl() {
+    	return url;
+    }
+    
+    public String getContent() {
+    	return content;
     }
 
     public void setContentType(String type) {
