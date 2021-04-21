@@ -24,6 +24,11 @@ public class HTTP {
         InputStream responseStream = null;
         URLInfo urlInfo = new URLInfo(urlStr);
 
+        if (urlStr == null || urlStr.equals("")) {
+            logger.error("url String is empty");
+            return null;
+        }
+
         try {
             URL url = new URL(urlInfo.getProtocol(), urlInfo.getHostName(), urlInfo.getPortNo(), urlInfo.getFilePath());
 
@@ -47,6 +52,7 @@ public class HTTP {
             // Get only the headers we care about for our purposes.
             if (responseHeaders != null) {
                 String contentLength = connection.getHeaderField("Content-Length");
+
                 if (contentLength != null) {
                     responseHeaders.put("Content-Length", contentLength.trim());
                 }

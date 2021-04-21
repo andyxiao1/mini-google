@@ -1,4 +1,4 @@
-package edu.upenn.cis.cis455.crawler;
+package edu.upenn.cis.cis455.crawler.worker;
 
 import java.time.Instant;
 import java.util.HashMap;

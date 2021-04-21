@@ -6,10 +6,10 @@ import java.util.UUID;
 
 import static edu.upenn.cis.cis455.crawler.utils.Constants.*;
 
-import edu.upenn.cis.cis455.crawler.CrawlerQueue;
 import edu.upenn.cis.cis455.crawler.utils.CrawlerState;
 import edu.upenn.cis.cis455.crawler.utils.HTTP;
 import edu.upenn.cis.cis455.crawler.utils.URLInfo;
+import edu.upenn.cis.cis455.crawler.worker.CrawlerQueue;
 import edu.upenn.cis.cis455.storage.DatabaseEnv;
 import edu.upenn.cis.cis455.storage.RobotsInfo;
 import edu.upenn.cis.cis455.storage.StorageFactory;
@@ -31,7 +31,7 @@ public class UrlSpout implements IRichSpout {
     /**
      * The `UrlSpout` retrieves a url from the queue and emits it as a String.
      */
-    Fields schema = new Fields("url");
+    Fields schema = new Fields("domain", "url");
 
     /**
      * To make it easier to debug: we have a unique ID for each instance.
@@ -93,7 +93,7 @@ public class UrlSpout implements IRichSpout {
         // Note: We end early and don't update the queue order at all, so the same
         // domain/url will be at the head.
         if (!queue.hasRobotsInfo(domain)) {
-            logger.info(domain + ": retrieving associated robots.txt information");
+            logger.debug(domain + ": retrieving associated robots.txt information");
             fetchRobotsInfo(domain);
             return true;
         }
@@ -112,7 +112,7 @@ public class UrlSpout implements IRichSpout {
 
         // Check that url is not disallowed. If it is disallowed, drop it.
         if (!isUrlAllowed(url, robotsInfo)) {
-            logger.info(url + ": not allowed by robots.txt");
+            logger.debug(url + ": not allowed by robots.txt");
             return true;
         }
 
@@ -121,9 +121,8 @@ public class UrlSpout implements IRichSpout {
         // conditions where this doesn't work.
         queue.accessDomain(domain);
 
-        logger.info(getExecutorId() + " emitting " + url);
-        CrawlerState.count++;
-        collector.emit(new Values<Object>(url), getExecutorId());
+        logger.debug(getExecutorId() + " emitting " + url);
+        collector.emit(new Values<Object>(domain, url), getExecutorId());
         return true;
     }
 
@@ -146,12 +145,17 @@ public class UrlSpout implements IRichSpout {
 
         RobotsInfo robotsInfo = null;
         if (database.containsRobotsInfo(domain)) {
-            logger.info(domain + ": fetcihng robots.txt from database");
+            logger.debug(domain + ": fetching robots.txt from database");
             robotsInfo = database.getRobotsInfo(domain);
         } else {
-            logger.info(domain + ": making http request for robots.txt");
+            logger.debug(domain + ": making http request for robots.txt");
             String robotsUrl = domain + ROBOTS_PATH;
             String robotsFile = HTTP.makeRequest(robotsUrl, GET_REQUEST, MAX_ROBOTS_FILE_SIZE, null);
+
+            if (CrawlerState.isShutdown) {
+                return;
+            }
+
             robotsInfo = database.addRobotsInfo(domain, robotsFile);
             queue.accessDomain(domain);
         }

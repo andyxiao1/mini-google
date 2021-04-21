@@ -6,7 +6,9 @@ import static edu.upenn.cis.cis455.crawler.utils.Constants.*;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -16,12 +18,15 @@ import edu.upenn.cis.cis455.crawler.streamprocessors.LinkExtractorBolt;
 import edu.upenn.cis.cis455.crawler.streamprocessors.LinkFilterBolt;
 import edu.upenn.cis.cis455.crawler.streamprocessors.UrlSpout;
 import edu.upenn.cis.cis455.crawler.utils.HTTP;
+import edu.upenn.cis.cis455.crawler.utils.URLInfo;
 import edu.upenn.cis.stormlite.Config;
 import edu.upenn.cis.stormlite.Topology;
 import edu.upenn.cis.stormlite.TopologyBuilder;
 import edu.upenn.cis.stormlite.distributed.WorkerHelper;
 import edu.upenn.cis.stormlite.distributed.WorkerJob;
 import edu.upenn.cis.stormlite.tuple.Fields;
+import edu.upenn.cis.stormlite.tuple.Tuple;
+import edu.upenn.cis.stormlite.tuple.Values;
 
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
@@ -35,8 +40,7 @@ public class CrawlMaster {
     Integer maxCrawlCount;
 
     List<String> workers = new ArrayList<String>();
-    // Map<String, WorkerData> workerLookup = new HashMap<String,
-    // WorkerData>();
+    Map<String, WorkerData> workerLookup = new HashMap<String, WorkerData>();
     AtomicBoolean isRunning = new AtomicBoolean(true);
 
     public CrawlMaster(int port, String url, Integer maxSize, Integer count) {
@@ -48,9 +52,9 @@ public class CrawlMaster {
         maxCrawlCount = count;
 
         defineStartCrawlRoute();
+        defineWorkerStatusRoute();
         defineShutdownRoute();
         setupShutdownThread();
-        // TODO: worker status route - also connects + maintains worker list
     }
 
     private void defineStartCrawlRoute() {
@@ -61,39 +65,19 @@ public class CrawlMaster {
             Config config = new Config();
             config.put(MAX_DOCUMENT_SIZE, maxDocSize.toString());
             config.put(CRAWL_COUNT, maxCrawlCount.toString());
-            config.put(WORKER_LIST, "[127.0.0.1:8001,127.0.0.1:8002]"); // TODO: hardcoded
-            // config.put(WORKER_LIST, "[127.0.0.1:8001]"); // TODO: hardcoded
-
-            UrlSpout urlSpout = new UrlSpout();
-            DocumentFetcherBolt docFetcherBolt = new DocumentFetcherBolt();
-            LinkExtractorBolt linkExtractorBolt = new LinkExtractorBolt();
-            LinkFilterBolt linkFilterBolt = new LinkFilterBolt();
-            TopologyBuilder builder = new TopologyBuilder();
-
-            builder.setSpout(URL_SPOUT, urlSpout, 3);
-            builder.setBolt(DOC_FETCHER_BOLT, docFetcherBolt, 3).fieldsGrouping(URL_SPOUT, new Fields("url"));
-            builder.setBolt(LINK_EXTRACTOR_BOLT, linkExtractorBolt, 3).fieldsGrouping(DOC_FETCHER_BOLT,
-                    new Fields("url"));
-            builder.setBolt(LINK_FILTER_BOLT, linkFilterBolt, 3).fieldsGrouping(LINK_EXTRACTOR_BOLT, new Fields("url"));
-
-            Topology topo = builder.createTopology();
-            WorkerJob job = new WorkerJob(topo, config);
+            config.put(WORKER_LIST, getWorkerList());
+            WorkerJob job = new WorkerJob(setupTopology(), config);
 
             // Send job to workers.
             ObjectMapper mapper = new ObjectMapper();
             mapper.enableDefaultTyping(ObjectMapper.DefaultTyping.NON_FINAL);
             try {
-                String[] workers = WorkerHelper.getWorkers(config);
+                String[] workerAddrs = WorkerHelper.getWorkers(config);
 
-                for (int i = 0; i < workers.length; i++) {
-                    String dest = workers[i];
+                // Initialize all workers by sending StormLite topology.
+                for (int i = 0; i < workerAddrs.length; i++) {
+                    String dest = workerAddrs[i];
                     config.put(WORKER_INDEX, String.valueOf(i));
-                    // TODO: hardcoded
-                    if (i == 0) {
-                        config.put(START_URL, startUrl); // TODO: hardcoded, make into list
-                    } else {
-                        config.put(START_URL, "https://en.wikipedia.org/wiki/Patience_sorting");
-                    }
 
                     String url = dest + "/" + "initcrawl";
                     String body = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(job);
@@ -102,10 +86,33 @@ public class CrawlMaster {
                     }
                 }
 
-                for (String dest : workers) {
+                // Start all crawl workers.
+                for (String dest : workerAddrs) {
                     String url = dest + "/" + "startcrawl";
                     if (HTTP.sendData(url, POST_REQUEST, "") != HttpURLConnection.HTTP_OK) {
                         throw new RuntimeException("Job execution request failed");
+                    }
+                }
+
+                // Send each start URL to every worker's `pushdata` link filter bolt route. They
+                // will only execute locally if the tuple belongs to them.
+                List<String> startUrls = new ArrayList<String>();
+                // startUrls.add(startUrl);
+                startUrls.add("https://en.wikipedia.org/wiki/Poisson_distribution");
+                startUrls.add("https://en.wikipedia.org/wiki/Pittsburgh_Steelers");
+                startUrls.add("https://www.imdb.com/title/tt0848228/");
+                startUrls.add("https://www.britannica.com/");
+
+                for (String currUrl : startUrls) {
+                    String domain = (new URLInfo(currUrl)).getBaseUrl();
+                    Values<Object> urlValues = new Values<Object>(domain, currUrl);
+                    Tuple urlTuple = new Tuple(new Fields("domain", "url"), urlValues, "master");
+                    for (String dest : workerAddrs) {
+                        String url = dest + "/" + "pushdata/" + LINK_FILTER_BOLT;
+                        String body = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(urlTuple);
+                        if (HTTP.sendData(url, POST_REQUEST, body) != HttpURLConnection.HTTP_OK) {
+                            throw new RuntimeException("Start url pushdata request failed");
+                        }
                     }
                 }
 
@@ -118,15 +125,34 @@ public class CrawlMaster {
         });
     }
 
+    private void defineWorkerStatusRoute() {
+        get("/workerstatus", (request, response) -> {
+            log.info("Received worker status from " + request.ip() + " with parameters: " + request.queryString());
+
+            String addr = request.ip() + ":" + request.queryParams("port");
+            synchronized (workerLookup) {
+                if (workerLookup.containsKey(addr)) {
+                    log.info("Updating worker " + addr);
+                    workerLookup.get(addr).update(request);
+                } else {
+                    log.info("Adding new worker " + addr);
+                    workers.add(addr);
+                    workerLookup.put(addr, new WorkerData(request));
+                }
+            }
+            return "Status updated!";
+        });
+    }
+
     private void defineShutdownRoute() {
         get("/shutdown", (request, response) -> {
             log.info("Shutting down");
 
-            // TODO: hardcoded
-            String addr = "127.0.0.1:8001";
-            HTTP.sendData("http://" + addr + "/shutdown", GET_REQUEST, "");
-            addr = "127.0.0.1:8002";
-            HTTP.sendData("http://" + addr + "/shutdown", GET_REQUEST, "");
+            synchronized (workerLookup) {
+                for (String addr : workers) {
+                    HTTP.sendData("http://" + addr + "/shutdown", GET_REQUEST, "");
+                }
+            }
 
             isRunning.set(false);
             return "Shutdown has started!";
@@ -147,6 +173,42 @@ public class CrawlMaster {
         };
         Thread shutdownThread = new Thread(shutdownRunnable);
         shutdownThread.start();
+    }
+
+    private String getWorkerList() {
+        synchronized (workerLookup) {
+            String result = "";
+            for (String addr : workers) {
+                if (workerLookup.get(addr).isActive()) {
+                    result += addr + ",";
+                }
+            }
+
+            if (result.length() > 0 && result.charAt(result.length() - 1) == ',') {
+                result = result.substring(0, result.length() - 1);
+            }
+
+            // Example: [127.0.0.1:8001,127.0.0.1:8002]
+            log.info("Building workerList [" + result + "]");
+            return "[" + result + "]";
+        }
+    }
+
+    private Topology setupTopology() {
+        // Setup StormLite topology.
+        UrlSpout urlSpout = new UrlSpout();
+        DocumentFetcherBolt docFetcherBolt = new DocumentFetcherBolt();
+        LinkExtractorBolt linkExtractorBolt = new LinkExtractorBolt();
+        LinkFilterBolt linkFilterBolt = new LinkFilterBolt();
+        TopologyBuilder builder = new TopologyBuilder();
+
+        builder.setSpout(URL_SPOUT, urlSpout, 2);
+        builder.setBolt(DOC_FETCHER_BOLT, docFetcherBolt, 5).fieldsGrouping(URL_SPOUT, new Fields("domain"));
+        builder.setBolt(LINK_EXTRACTOR_BOLT, linkExtractorBolt, 2).fieldsGrouping(DOC_FETCHER_BOLT,
+                new Fields("domain"));
+        builder.setBolt(LINK_FILTER_BOLT, linkFilterBolt, 5).fieldsGrouping(LINK_EXTRACTOR_BOLT, new Fields("domain"));
+
+        return builder.createTopology();
     }
 
     public static void main(String[] args) {

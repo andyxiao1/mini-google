@@ -34,7 +34,7 @@ public class DocumentFetcherBolt implements IRichBolt {
      * The `DocumentFetcherBolt` fetches the document for a url and returns it as a
      * String.
      */
-    Fields schema = new Fields("url", "document", "contentType", "isCachedVersion");
+    Fields schema = new Fields("domain", "url", "document", "contentType", "isCachedVersion");
 
     /**
      * To make it easier to debug: we have a unique ID for each instance.
@@ -75,8 +75,9 @@ public class DocumentFetcherBolt implements IRichBolt {
 
     @Override
     public boolean execute(Tuple input) {
+        String domain = input.getStringByField("domain");
         String url = input.getStringByField("url");
-        logger.info(getExecutorId() + " received " + url);
+        logger.debug(getExecutorId() + " received " + url);
 
         if (CrawlerState.isShutdown) {
             return true;
@@ -84,14 +85,18 @@ public class DocumentFetcherBolt implements IRichBolt {
 
         // Validate url document with HEAD request according to content type and length.
         // If the url isn't valid, we drop it.
-        logger.info(url + ": validating document with head request");
+        logger.debug(url + ": validating document with head request");
         Map<String, String> responseHeaders = new HashMap<String, String>();
 
         if (!isDocumentValid(url, responseHeaders)) {
-            logger.info(url + ": document is invalid");
+            logger.debug(url + ": document is invalid");
             return true;
         }
-        logger.info(url + ": validated");
+        logger.debug(url + ": validated");
+
+        if (CrawlerState.isShutdown) {
+            return true;
+        }
 
         // Check if we can use cached version.
         long lastModified = convertDateToEpoch(responseHeaders.get(LAST_MODIFIED_HEADER));
@@ -101,14 +106,18 @@ public class DocumentFetcherBolt implements IRichBolt {
         String content = null;
 
         if (shouldUseCachedVersion) {
-            logger.info(url + ": using cached version");
+            logger.debug(url + ": using cached version");
             content = database.getDocument(url);
         } else {
             content = HTTP.makeRequest(url, GET_REQUEST, maxDocumentSize, null);
             logger.info(url + ": downloading");
 
             if (content == null) {
-                logger.info(url + ": error fetching document");
+                logger.error(url + ": error fetching document");
+                return true;
+            }
+
+            if (CrawlerState.isShutdown) {
                 return true;
             }
         }
@@ -121,9 +130,10 @@ public class DocumentFetcherBolt implements IRichBolt {
         }
         database.addContentSeen(hash);
 
-        logger.info(getExecutorId() + " emitting content for " + url);
+        logger.debug(getExecutorId() + " emitting content for " + url);
         String contentType = responseHeaders.get(CONTENT_TYPE_HEADER);
-        collector.emit(new Values<Object>(url, content, contentType, shouldUseCachedVersion), getExecutorId());
+        CrawlerState.count++;
+        collector.emit(new Values<Object>(domain, url, content, contentType, shouldUseCachedVersion), getExecutorId());
         return true;
     }
 
@@ -160,23 +170,26 @@ public class DocumentFetcherBolt implements IRichBolt {
             return false;
         }
 
-        int contentLength = -1;
-        try {
-            contentLength = Integer.parseInt(responseHeaders.get(CONTENT_LENGTH_HEADER));
-        } catch (NumberFormatException e) {
-            logger.error("Error validating document: Content-Length is not a valid number");
-            logger.error(e);
-            return false;
-        }
+        // NOTE: Got rid of content length because a lot of sites don't send it on head
+        // requests.
+        // int contentLength = -1;
+        // try {
+        // contentLength = Integer.parseInt(responseHeaders.get(CONTENT_LENGTH_HEADER));
+        // } catch (NumberFormatException e) {
+        // logger.error("Error validating document: Content-Length is not a valid number
+        // - " + responseHeaders.get(CONTENT_LENGTH_HEADER));
+        // logger.error(e);
+        // return false;
+        // }
         String contentType = responseHeaders.get(CONTENT_TYPE_HEADER);
 
-        if (contentLength > maxDocumentSize) {
-            logger.info(url + ": file too big");
-            return false;
-        }
+        // if (contentLength > maxDocumentSize) {
+        // logger.debug(url + ": file too big");
+        // return false;
+        // }
 
         if (contentType == null || !VALID_FILE_TYPES_SET.contains(contentType) && !contentType.endsWith("+xml")) {
-            logger.info(url + ": invalid file type");
+            logger.debug(url + ": invalid file type");
             return false;
         }
 

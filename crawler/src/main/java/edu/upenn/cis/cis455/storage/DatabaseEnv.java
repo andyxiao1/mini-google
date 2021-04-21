@@ -149,7 +149,7 @@ public class DatabaseEnv implements StorageInterface {
         contentSeenByHash.put(content);
         txn.commit();
 
-        logger.info("Added document hash to content seen");
+        logger.debug("Added document hash to content seen");
     }
 
     public boolean containsHashContent(String hash) {
@@ -172,7 +172,7 @@ public class DatabaseEnv implements StorageInterface {
         urlSeenByUrl.put(urlSeen);
         txn.commit();
 
-        logger.info("Added url to url seen: " + url);
+        logger.debug("Added url to url seen: " + url);
     }
 
     public boolean containsUrl(String url) {
@@ -195,7 +195,7 @@ public class DatabaseEnv implements StorageInterface {
         robotsInfoByDomain.put(robots);
         txn.commit();
 
-        logger.info("Added robots.txt contents to robots db: " + baseUrl);
+        logger.debug("Added robots.txt contents to robots db: " + baseUrl);
         return robots;
     }
 
@@ -214,7 +214,7 @@ public class DatabaseEnv implements StorageInterface {
         robotsInfoByDomain.put(robots);
         txn.commit();
 
-        logger.info("Updated last access time in robots db for: " + robots.domain + " to " + robots.lastAccessedTime);
+        logger.debug("Updated last access time in robots db for: " + robots.domain + " to " + robots.lastAccessedTime);
     }
 
     ///////////////////////////////////////////////////
@@ -271,41 +271,41 @@ public class DatabaseEnv implements StorageInterface {
         res += "Number of documents: " + count + "\n";
         res += "=======================================\n";
 
-        // Print content seen
-        EntityCursor<ContentSeen> contentSeen = contentSeenByHash.entities();
-        count = 0;
+        // // Print content seen
+        // EntityCursor<ContentSeen> contentSeen = contentSeenByHash.entities();
+        // count = 0;
 
-        for (ContentSeen content : contentSeen) {
-            res += content;
-            count++;
-        }
-        contentSeen.close();
-        res += "Number of hash contents seen: " + count + "\n";
-        res += "=======================================\n";
+        // for (ContentSeen content : contentSeen) {
+        // res += content;
+        // count++;
+        // }
+        // contentSeen.close();
+        // res += "Number of hash contents seen: " + count + "\n";
+        // res += "=======================================\n";
 
-        // Print urls seen
-        EntityCursor<UrlSeen> urls = urlSeenByUrl.entities();
-        count = 0;
+        // // Print urls seen
+        // EntityCursor<UrlSeen> urls = urlSeenByUrl.entities();
+        // count = 0;
 
-        for (UrlSeen url : urls) {
-            res += url;
-            count++;
-        }
-        urls.close();
-        res += "Number of urls seen: " + count + "\n";
-        res += "=======================================\n";
+        // for (UrlSeen url : urls) {
+        // res += url;
+        // count++;
+        // }
+        // urls.close();
+        // res += "Number of urls seen: " + count + "\n";
+        // res += "=======================================\n";
 
-        // Print robots
-        EntityCursor<RobotsInfo> robots = robotsInfoByDomain.entities();
-        count = 0;
+        // // Print robots
+        // EntityCursor<RobotsInfo> robots = robotsInfoByDomain.entities();
+        // count = 0;
 
-        for (RobotsInfo robot : robots) {
-            res += robot;
-            count++;
-        }
-        robots.close();
-        res += "Number of robots seen: " + count + "\n";
-        res += "=======================================\n";
+        // for (RobotsInfo robot : robots) {
+        // res += robot;
+        // count++;
+        // }
+        // robots.close();
+        // res += "Number of robots seen: " + count + "\n";
+        // res += "=======================================\n";
 
         return res;
     }

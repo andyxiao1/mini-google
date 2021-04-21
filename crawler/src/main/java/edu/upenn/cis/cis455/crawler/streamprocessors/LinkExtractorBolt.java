@@ -6,6 +6,7 @@ import java.util.UUID;
 import static edu.upenn.cis.cis455.crawler.utils.Constants.*;
 
 import edu.upenn.cis.cis455.crawler.utils.CrawlerState;
+import edu.upenn.cis.cis455.crawler.utils.URLInfo;
 import edu.upenn.cis.cis455.storage.DatabaseEnv;
 import edu.upenn.cis.cis455.storage.StorageFactory;
 import edu.upenn.cis.stormlite.OutputFieldsDeclarer;
@@ -33,7 +34,7 @@ public class LinkExtractorBolt implements IRichBolt {
      * The `LinkExtractorBolt` extracts links from a document and streams the urls
      * as Strings.
      */
-    Fields schema = new Fields("url");
+    Fields schema = new Fields("domain", "url");
 
     /**
      * To make it easier to debug: we have a unique ID for each instance.
@@ -74,7 +75,7 @@ public class LinkExtractorBolt implements IRichBolt {
         String contentType = input.getStringByField("contentType");
         boolean isCachedVersion = (boolean) input.getObjectByField("isCachedVersion");
 
-        logger.info(getExecutorId() + " received document for " + url);
+        logger.debug(getExecutorId() + " received document for " + url);
 
         if (CrawlerState.isShutdown) {
             return true;
@@ -82,24 +83,25 @@ public class LinkExtractorBolt implements IRichBolt {
 
         // If not already cached, store document in index.
         if (!isCachedVersion) {
-            logger.info(url + ": storing new content");
+            logger.debug(url + ": storing new content");
             database.addDocument(url, document, contentType);
         }
 
         // Only parse html documents for links.
         if (contentType == null || !contentType.equals(HTML_CONTENT_TYPE)) {
-            logger.info(url + ": not parsing because it is not an html file");
+            logger.debug(url + ": not parsing because it is not an html file");
             return true;
         }
 
         // Parse for links and emit.
-        logger.info(url + ": parsing");
+        logger.debug(url + ": parsing");
         Document doc = Jsoup.parse(document, url);
         Elements links = doc.getElementsByAttribute("href");
         for (Element link : links) {
             String linkHref = link.attr("abs:href");
-            logger.info(getExecutorId() + " emitting new link " + linkHref);
-            collector.emit(new Values<Object>(linkHref), getExecutorId());
+            logger.debug(getExecutorId() + " emitting new link " + linkHref);
+            String domain = (new URLInfo(linkHref)).getBaseUrl();
+            collector.emit(new Values<Object>(domain, linkHref), getExecutorId());
         }
         return true;
     }
