@@ -74,7 +74,7 @@ public class HTTP {
             if (rlen > -1) {
                 response = Arrays.copyOf(response, rlen);
             }
-            return new String(response, "UTF-8");
+            return (new String(response, "UTF-8")).trim();
 
         } catch (MalformedURLException e) {
             logger.debug("Malformed URL: " + urlInfo);

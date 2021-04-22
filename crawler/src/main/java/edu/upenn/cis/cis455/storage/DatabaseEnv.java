@@ -75,16 +75,16 @@ public class DatabaseEnv implements StorageInterface {
     ///////////////////////////////////////////////////
 
     @Override
-    public int getCorpusSize() {
+    public synchronized int getCorpusSize() {
         return (int) documentById.count();
     }
 
     @Override
-    public int addDocument(String url, String documentContents) {
+    public synchronized int addDocument(String url, String documentContents) {
         return addDocument(url, documentContents, "");
     }
 
-    public int addDocument(String url, String documentContents, String contentType) {
+    public synchronized int addDocument(String url, String documentContents, String contentType) {
 
         Transaction txn = env.beginTransaction(null, null);
         Document doc = documentByUrl.get(url);
@@ -104,21 +104,21 @@ public class DatabaseEnv implements StorageInterface {
     }
 
     @Override
-    public String getDocument(String url) {
+    public synchronized String getDocument(String url) {
         Document doc = documentByUrl.get(url);
         return doc.content;
     }
 
-    public Document getDocument(int id) {
+    public synchronized Document getDocument(int id) {
         return documentById.get(id);
     }
 
-    public String getDocumentType(String url) {
+    public synchronized String getDocumentType(String url) {
         Document doc = documentByUrl.get(url);
         return doc.contentType;
     }
 
-    public long getDocumentLastFetch(String url) {
+    public synchronized long getDocumentLastFetch(String url) {
         if (!containsDocument(url)) {
             return -1;
         }
@@ -126,7 +126,7 @@ public class DatabaseEnv implements StorageInterface {
         return doc.lastFetchedDate;
     }
 
-    public boolean containsDocument(String url) {
+    public synchronized boolean containsDocument(String url) {
         if (url == null) {
             return false;
         }
@@ -137,7 +137,7 @@ public class DatabaseEnv implements StorageInterface {
     // Content Seen Methods
     ///////////////////////////////////////////////////
 
-    public void addContentSeen(String hash) {
+    public synchronized void addContentSeen(String hash) {
 
         Transaction txn = env.beginTransaction(null, null);
         if (containsHashContent(hash)) {
@@ -152,7 +152,7 @@ public class DatabaseEnv implements StorageInterface {
         logger.debug("Added document hash to content seen");
     }
 
-    public boolean containsHashContent(String hash) {
+    public synchronized boolean containsHashContent(String hash) {
         return contentSeenByHash.contains(hash);
     }
 
@@ -160,7 +160,7 @@ public class DatabaseEnv implements StorageInterface {
     // Url Seen Methods
     ///////////////////////////////////////////////////
 
-    public void addUrl(String url) {
+    public synchronized void addUrl(String url) {
 
         Transaction txn = env.beginTransaction(null, null);
         if (containsUrl(url)) {
@@ -175,7 +175,7 @@ public class DatabaseEnv implements StorageInterface {
         logger.debug("Added url to url seen: " + url);
     }
 
-    public boolean containsUrl(String url) {
+    public synchronized boolean containsUrl(String url) {
         return urlSeenByUrl.contains(url);
     }
 
@@ -183,7 +183,7 @@ public class DatabaseEnv implements StorageInterface {
     // Robots Methods
     ///////////////////////////////////////////////////
 
-    public RobotsInfo addRobotsInfo(String baseUrl, String robotsFile) {
+    public synchronized RobotsInfo addRobotsInfo(String baseUrl, String robotsFile) {
 
         Transaction txn = env.beginTransaction(null, null);
         if (containsRobotsInfo(baseUrl)) {
@@ -199,15 +199,15 @@ public class DatabaseEnv implements StorageInterface {
         return robots;
     }
 
-    public RobotsInfo getRobotsInfo(String baseUrl) {
+    public synchronized RobotsInfo getRobotsInfo(String baseUrl) {
         return robotsInfoByDomain.get(baseUrl);
     }
 
-    public boolean containsRobotsInfo(String baseUrl) {
+    public synchronized boolean containsRobotsInfo(String baseUrl) {
         return robotsInfoByDomain.contains(baseUrl);
     }
 
-    public void accessDomain(RobotsInfo robots) {
+    public synchronized void accessDomain(RobotsInfo robots) {
 
         Transaction txn = env.beginTransaction(null, null);
         robots.access();
@@ -221,7 +221,7 @@ public class DatabaseEnv implements StorageInterface {
     // Çrawler Methods
     ///////////////////////////////////////////////////
 
-    public void resetRun() {
+    public synchronized void resetRun() {
         store.truncateClass(ContentSeen.class);
         contentSeenByHash = store.getPrimaryIndex(String.class, ContentSeen.class);
 
@@ -237,7 +237,7 @@ public class DatabaseEnv implements StorageInterface {
     ///////////////////////////////////////////////////
 
     @Override
-    public void close() {
+    public synchronized void close() {
         if (store != null) {
             try {
                 store.close();
@@ -256,7 +256,7 @@ public class DatabaseEnv implements StorageInterface {
         }
     }
 
-    public String toString() {
+    public synchronized String toString() {
 
         // Print documents
         EntityCursor<Document> documents = documentById.entities();
@@ -280,8 +280,8 @@ public class DatabaseEnv implements StorageInterface {
         // count++;
         // }
         // contentSeen.close();
-        // res += "Number of hash contents seen: " + count + "\n";
-        // res += "=======================================\n";
+        res += "Number of hash contents seen: " + contentSeenByHash.count() + "\n";
+        res += "=======================================\n";
 
         // // Print urls seen
         // EntityCursor<UrlSeen> urls = urlSeenByUrl.entities();
@@ -292,8 +292,8 @@ public class DatabaseEnv implements StorageInterface {
         // count++;
         // }
         // urls.close();
-        // res += "Number of urls seen: " + count + "\n";
-        // res += "=======================================\n";
+        res += "Number of urls seen: " + urlSeenByUrl.count() + "\n";
+        res += "=======================================\n";
 
         // // Print robots
         // EntityCursor<RobotsInfo> robots = robotsInfoByDomain.entities();
@@ -304,8 +304,8 @@ public class DatabaseEnv implements StorageInterface {
         // count++;
         // }
         // robots.close();
-        // res += "Number of robots seen: " + count + "\n";
-        // res += "=======================================\n";
+        res += "Number of robots seen: " + robotsInfoByDomain.count() + "\n";
+        res += "=======================================\n";
 
         return res;
     }

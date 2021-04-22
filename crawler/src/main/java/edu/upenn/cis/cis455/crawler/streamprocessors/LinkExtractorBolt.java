@@ -5,9 +5,10 @@ import java.util.UUID;
 
 import static edu.upenn.cis.cis455.crawler.utils.Constants.*;
 
-import edu.upenn.cis.cis455.crawler.utils.CrawlerState;
 import edu.upenn.cis.cis455.crawler.utils.URLInfo;
 import edu.upenn.cis.cis455.storage.DatabaseEnv;
+import edu.upenn.cis.cis455.storage.DynamoDBInstance;
+import edu.upenn.cis.cis455.storage.DynamoFactory;
 import edu.upenn.cis.cis455.storage.StorageFactory;
 import edu.upenn.cis.stormlite.OutputFieldsDeclarer;
 import edu.upenn.cis.stormlite.TopologyContext;
@@ -50,6 +51,7 @@ public class LinkExtractorBolt implements IRichBolt {
      * Interface for database methods.
      */
     DatabaseEnv database;
+    DynamoDBInstance dynamoDB;
 
     @Override
     public String getExecutorId() {
@@ -65,6 +67,7 @@ public class LinkExtractorBolt implements IRichBolt {
     public void prepare(Map<String, String> config, TopologyContext context, OutputCollector coll) {
         collector = coll;
         database = (DatabaseEnv) StorageFactory.getDatabaseInstance(config.get(DATABASE_DIRECTORY));
+        dynamoDB = DynamoFactory.getDatabaseInstance();
     }
 
     @Override
@@ -73,19 +76,8 @@ public class LinkExtractorBolt implements IRichBolt {
 
         String document = input.getStringByField("document");
         String contentType = input.getStringByField("contentType");
-        boolean isCachedVersion = (boolean) input.getObjectByField("isCachedVersion");
 
         logger.debug(getExecutorId() + " received document for " + url);
-
-        if (CrawlerState.isShutdown) {
-            return true;
-        }
-
-        // If not already cached, store document in index.
-        if (!isCachedVersion) {
-            logger.debug(url + ": storing new content");
-            database.addDocument(url, document, contentType);
-        }
 
         // Only parse html documents for links.
         if (contentType == null || !contentType.equals(HTML_CONTENT_TYPE)) {
@@ -108,9 +100,6 @@ public class LinkExtractorBolt implements IRichBolt {
 
     @Override
     public void cleanup() {
-        if (database != null) {
-            database.close();
-        }
     }
 
     @Override

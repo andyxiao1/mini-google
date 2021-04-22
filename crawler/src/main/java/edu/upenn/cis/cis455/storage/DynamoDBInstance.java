@@ -79,7 +79,7 @@ public class DynamoDBInstance {
         TableDescription tableDescription = dynamoDB.describeTable(describeTableRequest).getTable();
 
         numDocs = Math.toIntExact(tableDescription.getItemCount());
-        System.out.println("num docs: " + numDocs);
+        // System.out.println("num docs: " + numDocs);
 
         // DescribeTableRequest describeTableRequest = new
         // DescribeTableRequest().withTableName(tableName);
@@ -87,6 +87,20 @@ public class DynamoDBInstance {
         // TableDescription tableDescription =
         // dynamoDB.describeTable(describeTableRequest).getTable();
 
+    }
+
+    public int putDocument(String url, String content) {
+
+        int id = url.hashCode();
+        Map<String, AttributeValue> item = new HashMap<String, AttributeValue>();
+
+        item.put("url", new AttributeValue(url));
+        item.put("id", new AttributeValue().withN(Integer.toString(id)));
+        item.put("content", new AttributeValue(content));
+
+        PutItemRequest putItemRequest = new PutItemRequest(tableName, item);
+        PutItemResult putItemResult = dynamoDB.putItem(putItemRequest);
+        return id;
     }
 
     public int putDocument(Document doc) {

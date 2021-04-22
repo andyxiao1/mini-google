@@ -181,21 +181,12 @@
                             </arguments>
                         </configuration>
                     </execution>
-                    <execution>
-                        <id>testdynamo</id>
-                        <goals>
-                            <goal>java</goal>
-                        </goals>
-                        <configuration>
-                            <mainClass>edu.upenn.cis.cis455.storage.DynamoDBInstance</mainClass>
-                        </configuration>
-                    </execution>
                 </executions>
                 <configuration>
                     <mainClass>edu.upenn.cis.cis455.crawler.master.CrawlMaster</mainClass>
                     <arguments>
                         <argument>45555</argument>
-                        <argument>https://crawltest.cis.upenn.edu/</argument>
+                        <argument>seed-urls.txt</argument>
                         <argument>1</argument>
                         <argument>15</argument>
                     </arguments>

@@ -135,8 +135,9 @@ public abstract class StreamRouter implements OutputFieldsDeclarer {
 
         if (bolts != null && !bolts.isEmpty()) {
             for (IRichBolt bolt : bolts) {
-                log.debug("Task queued: " + bolt.getClass().getName() + " (" + bolt.getExecutorId() + "): "
-                        + tuple.toString());
+                // log.debug("Task queued: " + bolt.getClass().getName() + " (" +
+                // bolt.getExecutorId() + "): "
+                // + tuple.toString());
                 context.addStreamTask(new BoltTask(bolt, new Tuple(schema, tuple, sourceExecutor)));
             }
 

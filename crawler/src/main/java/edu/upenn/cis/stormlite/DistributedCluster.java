@@ -25,6 +25,7 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.logging.log4j.Logger;
@@ -70,7 +71,7 @@ public class DistributedCluster implements Runnable {
 
 	ObjectMapper mapper = new ObjectMapper();
 
-	ExecutorService executor = Executors.newFixedThreadPool(1);
+	ExecutorService executor = Executors.newFixedThreadPool(5);
 
 	Queue<ITask> taskQueue = new ConcurrentLinkedQueue<ITask>();
 
@@ -290,6 +291,8 @@ public class DistributedCluster implements Runnable {
 			while (!quit.get())
 				Thread.yield();
 		}
+
+		// TODO: delete
 		// System.out.println(context.getMapOutputs() + " local map outputs and " +
 		// context.getReduceOutputs()
 		// + " local reduce outputs.");
@@ -311,5 +314,13 @@ public class DistributedCluster implements Runnable {
 
 	public StreamRouter getStreamRouter(String stream) {
 		return streams.get(stream);
+	}
+
+	public void awaitTermination() {
+		try {
+			executor.awaitTermination(10, TimeUnit.SECONDS);
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
 	}
 }

@@ -35,26 +35,36 @@ import org.apache.logging.log4j.Logger;
 public class CrawlMaster {
     static Logger log = LogManager.getLogger(CrawlMaster.class);
 
-    String startUrl;
     Integer maxDocSize;
     Integer maxCrawlCount;
+    List<String> seedUrls;
 
     List<String> workers = new ArrayList<String>();
     Map<String, WorkerData> workerLookup = new HashMap<String, WorkerData>();
     AtomicBoolean isRunning = new AtomicBoolean(true);
 
-    public CrawlMaster(int port, String url, Integer maxSize, Integer count) {
+    public CrawlMaster(int port, String seedUrlFile, Integer maxSize, Integer count) {
         log.info("Crawl master node startup, on port " + port);
 
         port(port);
-        startUrl = url;
         maxDocSize = maxSize;
         maxCrawlCount = count;
+        seedUrls = UrlReader.readSeedUrls(seedUrlFile);
 
+        defineStatusRoute();
         defineStartCrawlRoute();
         defineWorkerStatusRoute();
         defineShutdownRoute();
         setupShutdownThread();
+    }
+
+    private void defineStatusRoute() {
+        get("/status", (request, response) -> {
+            response.type("text/html");
+
+            return ("<html><head><title>Master</title></head>\n" + "<body><h2>Worker Status Info</h2><div>"
+                    + getWorkerStatuses() + "</div></body></html>");
+        });
     }
 
     private void defineStartCrawlRoute() {
@@ -96,17 +106,11 @@ public class CrawlMaster {
 
                 // Send each start URL to every worker's `pushdata` link filter bolt route. They
                 // will only execute locally if the tuple belongs to them.
-                List<String> startUrls = new ArrayList<String>();
-                // startUrls.add(startUrl);
-                startUrls.add("https://en.wikipedia.org/wiki/Poisson_distribution");
-                startUrls.add("https://en.wikipedia.org/wiki/Pittsburgh_Steelers");
-                startUrls.add("https://www.imdb.com/title/tt0848228/");
-                startUrls.add("https://www.britannica.com/");
-
-                for (String currUrl : startUrls) {
-                    String domain = (new URLInfo(currUrl)).getBaseUrl();
-                    Values<Object> urlValues = new Values<Object>(domain, currUrl);
+                for (String startUrl : seedUrls) {
+                    String domain = (new URLInfo(startUrl)).getBaseUrl();
+                    Values<Object> urlValues = new Values<Object>(domain, startUrl);
                     Tuple urlTuple = new Tuple(new Fields("domain", "url"), urlValues, "master");
+
                     for (String dest : workerAddrs) {
                         String url = dest + "/" + "pushdata/" + LINK_FILTER_BOLT;
                         String body = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(urlTuple);
@@ -202,32 +206,49 @@ public class CrawlMaster {
         LinkFilterBolt linkFilterBolt = new LinkFilterBolt();
         TopologyBuilder builder = new TopologyBuilder();
 
-        builder.setSpout(URL_SPOUT, urlSpout, 2);
-        builder.setBolt(DOC_FETCHER_BOLT, docFetcherBolt, 5).fieldsGrouping(URL_SPOUT, new Fields("domain"));
-        builder.setBolt(LINK_EXTRACTOR_BOLT, linkExtractorBolt, 2).fieldsGrouping(DOC_FETCHER_BOLT,
+        builder.setSpout(URL_SPOUT, urlSpout, 10);
+        builder.setBolt(DOC_FETCHER_BOLT, docFetcherBolt, 10).fieldsGrouping(URL_SPOUT, new Fields("domain"));
+        builder.setBolt(LINK_EXTRACTOR_BOLT, linkExtractorBolt, 1).fieldsGrouping(DOC_FETCHER_BOLT,
                 new Fields("domain"));
-        builder.setBolt(LINK_FILTER_BOLT, linkFilterBolt, 5).fieldsGrouping(LINK_EXTRACTOR_BOLT, new Fields("domain"));
+        builder.setBolt(LINK_FILTER_BOLT, linkFilterBolt, 1).fieldsGrouping(LINK_EXTRACTOR_BOLT, new Fields("domain"));
 
         return builder.createTopology();
     }
 
+    private String getWorkerStatuses() {
+        int i = 0;
+        String res = "";
+        int total = 0;
+        synchronized (workerLookup) {
+            for (String addr : workers) {
+                WorkerData data = workerLookup.get(addr);
+
+                if (data.isActive()) {
+                    res += (i++) + ": " + data + "<br>";
+                    total += data.count;
+                }
+            }
+        }
+        res += "total: " + total + "<br>";
+        return res;
+    }
+
     public static void main(String[] args) {
-        org.apache.logging.log4j.core.config.Configurator.setLevel("edu.upenn", Level.ALL);
+        org.apache.logging.log4j.core.config.Configurator.setLevel("edu.upenn", Level.INFO);
 
         // Process arguments.
         if (args.length != 4) {
             System.out.println(
-                    "Usage: CrawlMaster {port number} {start URL} {max doc size in MB} {number of files to index}");
+                    "Usage: CrawlMaster {port number} {seed url file} {max doc size in MB} {number of files to index}");
             System.exit(1);
         }
 
-        // TODO: start url should prob be a file of seed urls, for now we hardcode
         int port = Integer.valueOf(args[0]);
-        String startUrl = args[1];
+        String seedUrlFile = args[1];
         Integer maxDocSize = Integer.valueOf(args[2]);
         Integer maxCrawlCount = Integer.valueOf(args[3]);
 
         // Start CrawlMaster server.
-        new CrawlMaster(port, startUrl, maxDocSize, maxCrawlCount);
+        new CrawlMaster(port, seedUrlFile, maxDocSize, maxCrawlCount);
     }
 }

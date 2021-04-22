@@ -75,55 +75,53 @@ public class UrlSpout implements IRichSpout {
 
     @Override
     public void close() {
-        if (database != null) {
-            database.close();
-        }
     }
 
     @Override
     public boolean nextTuple() {
+        synchronized (queue) {
+            if (queue.isEmpty() || CrawlerState.isShutdown.get()) {
+                return true;
+            }
 
-        if (queue.isEmpty() || CrawlerState.isShutdown) {
+            String domain = queue.getNextDomain();
+
+            // Check if the domain has robots info.
+            // Note: We end early and don't update the queue order at all, so the same
+            // domain/url will be at the head.
+            if (!queue.hasRobotsInfo(domain)) {
+                logger.debug(domain + ": retrieving associated robots.txt information");
+                fetchRobotsInfo(domain);
+                return true;
+            }
+
+            RobotsInfo robotsInfo = queue.getRobotsInfo(domain);
+            long lastAccessedTime = queue.getLastAccessedTime(domain);
+
+            // Check that enough time has passed with respect to the `Crawl-delay` since the
+            // last request to this domain. If not, skip this domain.
+            if (!hasCrawlDelayPassed(lastAccessedTime, robotsInfo)) {
+                queue.skipDomain();
+                return true;
+            }
+
+            String url = queue.removeUrl();
+
+            // Check that url is not disallowed. If it is disallowed, drop it.
+            if (!isUrlAllowed(url, robotsInfo)) {
+                logger.debug(url + ": not allowed by robots.txt");
+                return true;
+            }
+
+            // Note: We are tracking access times by when the url gets emitted, so no two
+            // urls for a domain will be emitted within the crawl-delay, there may be some
+            // conditions where this doesn't work.
+            queue.accessDomain(domain);
+
+            logger.debug(getExecutorId() + " emitting " + url);
+            collector.emit(new Values<Object>(domain, url), getExecutorId());
             return true;
         }
-
-        String domain = queue.getNextDomain();
-
-        // Check if the domain has robots info.
-        // Note: We end early and don't update the queue order at all, so the same
-        // domain/url will be at the head.
-        if (!queue.hasRobotsInfo(domain)) {
-            logger.debug(domain + ": retrieving associated robots.txt information");
-            fetchRobotsInfo(domain);
-            return true;
-        }
-
-        RobotsInfo robotsInfo = queue.getRobotsInfo(domain);
-        long lastAccessedTime = queue.getLastAccessedTime(domain);
-
-        // Check that enough time has passed with respect to the `Crawl-delay` since the
-        // last request to this domain. If not, skip this domain.
-        if (!hasCrawlDelayPassed(lastAccessedTime, robotsInfo)) {
-            queue.skipDomain();
-            return true;
-        }
-
-        String url = queue.removeUrl();
-
-        // Check that url is not disallowed. If it is disallowed, drop it.
-        if (!isUrlAllowed(url, robotsInfo)) {
-            logger.debug(url + ": not allowed by robots.txt");
-            return true;
-        }
-
-        // Note: We are tracking access times by when the url gets emitted, so no two
-        // urls for a domain will be emitted within the crawl-delay, there may be some
-        // conditions where this doesn't work.
-        queue.accessDomain(domain);
-
-        logger.debug(getExecutorId() + " emitting " + url);
-        collector.emit(new Values<Object>(domain, url), getExecutorId());
-        return true;
     }
 
     @Override
@@ -151,10 +149,6 @@ public class UrlSpout implements IRichSpout {
             logger.debug(domain + ": making http request for robots.txt");
             String robotsUrl = domain + ROBOTS_PATH;
             String robotsFile = HTTP.makeRequest(robotsUrl, GET_REQUEST, MAX_ROBOTS_FILE_SIZE, null);
-
-            if (CrawlerState.isShutdown) {
-                return;
-            }
 
             robotsInfo = database.addRobotsInfo(domain, robotsFile);
             queue.accessDomain(domain);

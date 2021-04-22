@@ -51,8 +51,8 @@ public class CrawlWorker {
 
         database = (DatabaseEnv) StorageFactory.getDatabaseInstance(storageDir);
         queue = CrawlerQueue.getSingleton();
-        System.out.println(database);
-        database.resetRun();
+        // System.out.println(database);
+        // database.resetRun();
 
         port(port);
         defineInitCrawlRoute();
@@ -166,7 +166,7 @@ public class CrawlWorker {
 
                 // Send workerstatus to master server.
                 try {
-                    String queryString = "?port=" + port;
+                    String queryString = "?port=" + port + "&count=" + CrawlerState.count.get();
                     log.info("Sending worker status to master server with parameters: " + queryString);
 
                     HTTP.sendData(baseUrl + queryString, GET_REQUEST, "");
@@ -188,18 +188,21 @@ public class CrawlWorker {
 
     private void shutdown() {
         System.out.println(database);
-        System.out.println("Crawl Count: " + CrawlerState.count);
+        System.out.println("Crawl Count: " + CrawlerState.count.get());
 
-        CrawlerState.isShutdown = true;
+        CrawlerState.isShutdown.set(true);
         cluster.killTopology("");
         cluster.shutdown();
+        cluster.awaitTermination();
         stop();
+        database.close();
 
         try {
             workerStatusThread.join();
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
+        System.exit(0);
     }
 
     public static void main(String[] args) {

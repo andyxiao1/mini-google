@@ -5,7 +5,6 @@ import java.util.UUID;
 
 import static edu.upenn.cis.cis455.crawler.utils.Constants.*;
 
-import edu.upenn.cis.cis455.crawler.utils.CrawlerState;
 import edu.upenn.cis.cis455.crawler.worker.CrawlerQueue;
 import edu.upenn.cis.cis455.storage.DatabaseEnv;
 import edu.upenn.cis.cis455.storage.StorageFactory;
@@ -64,7 +63,7 @@ public class LinkFilterBolt implements IRichBolt {
         String url = input.getStringByField("url");
         logger.debug(getExecutorId() + " received " + url);
 
-        if (CrawlerState.isShutdown || url == null || url.equals("")) {
+        if (url == null || url.equals("")) {
             return true;
         }
 
@@ -81,9 +80,6 @@ public class LinkFilterBolt implements IRichBolt {
 
     @Override
     public void cleanup() {
-        if (database != null) {
-            database.close();
-        }
     }
 
     @Override

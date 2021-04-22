@@ -25,6 +25,7 @@ public final class Constants {
     public static final String START_URL = "START_URL";
 
     public static final int MEGABYTE_BYTES = 1000000; // 1e6 bytes = 1 mb
+
     public static final int MAX_ROBOTS_FILE_SIZE = 2 * MEGABYTE_BYTES;
 
     public static final String HEAD_REQUEST = "HEAD";

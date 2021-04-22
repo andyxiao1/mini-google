@@ -34,7 +34,7 @@ public class DocumentFetcherBolt implements IRichBolt {
      * The `DocumentFetcherBolt` fetches the document for a url and returns it as a
      * String.
      */
-    Fields schema = new Fields("domain", "url", "document", "contentType", "isCachedVersion");
+    Fields schema = new Fields("domain", "url", "document", "contentType");
 
     /**
      * To make it easier to debug: we have a unique ID for each instance.
@@ -79,10 +79,6 @@ public class DocumentFetcherBolt implements IRichBolt {
         String url = input.getStringByField("url");
         logger.debug(getExecutorId() + " received " + url);
 
-        if (CrawlerState.isShutdown) {
-            return true;
-        }
-
         // Validate url document with HEAD request according to content type and length.
         // If the url isn't valid, we drop it.
         logger.debug(url + ": validating document with head request");
@@ -94,32 +90,12 @@ public class DocumentFetcherBolt implements IRichBolt {
         }
         logger.debug(url + ": validated");
 
-        if (CrawlerState.isShutdown) {
+        String content = HTTP.makeRequest(url, GET_REQUEST, maxDocumentSize, null);
+        logger.info(url + ": downloading");
+
+        if (content == null) {
+            logger.error(url + ": error fetching document");
             return true;
-        }
-
-        // Check if we can use cached version.
-        long lastModified = convertDateToEpoch(responseHeaders.get(LAST_MODIFIED_HEADER));
-        long lastFetched = database.getDocumentLastFetch(url);
-        boolean shouldUseCachedVersion = lastModified != -1 && lastFetched != -1 && lastModified < lastFetched;
-
-        String content = null;
-
-        if (shouldUseCachedVersion) {
-            logger.debug(url + ": using cached version");
-            content = database.getDocument(url);
-        } else {
-            content = HTTP.makeRequest(url, GET_REQUEST, maxDocumentSize, null);
-            logger.info(url + ": downloading");
-
-            if (content == null) {
-                logger.error(url + ": error fetching document");
-                return true;
-            }
-
-            if (CrawlerState.isShutdown) {
-                return true;
-            }
         }
 
         // Content-seen filter.
@@ -130,18 +106,20 @@ public class DocumentFetcherBolt implements IRichBolt {
         }
         database.addContentSeen(hash);
 
-        logger.debug(getExecutorId() + " emitting content for " + url);
+        // Store document in database.
+        logger.info(url + ": storing document in dynamoDB");
         String contentType = responseHeaders.get(CONTENT_TYPE_HEADER);
-        CrawlerState.count++;
-        collector.emit(new Values<Object>(domain, url, content, contentType, shouldUseCachedVersion), getExecutorId());
+        database.addDocument(url, content, contentType);
+        // dynamoDB.putDocument(url, document);
+        CrawlerState.count.incrementAndGet();
+
+        logger.debug(getExecutorId() + " emitting content for " + url);
+        collector.emit(new Values<Object>(domain, url, content, contentType), getExecutorId());
         return true;
     }
 
     @Override
     public void cleanup() {
-        if (database != null) {
-            database.close();
-        }
     }
 
     @Override
