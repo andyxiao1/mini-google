@@ -33,7 +33,6 @@ public class CrawlWorker {
     DistributedCluster cluster;
     ObjectMapper om;
     DatabaseEnv database;
-    CrawlerQueue queue;
     TopologyContext context;
     Thread workerStatusThread;
 
@@ -50,7 +49,6 @@ public class CrawlWorker {
         om.enableDefaultTyping(ObjectMapper.DefaultTyping.NON_FINAL);
 
         database = (DatabaseEnv) StorageFactory.getDatabaseInstance(storageDir);
-        queue = CrawlerQueue.getSingleton();
         // System.out.println(database);
         // database.resetRun();
 
@@ -70,11 +68,6 @@ public class CrawlWorker {
                 workerJob = om.readValue(request.body(), WorkerJob.class);
                 Config config = workerJob.getConfig();
                 config.put(DATABASE_DIRECTORY, storageDir);
-
-                // TODO: delete
-                // String startUrl = config.get(START_URL);
-                // database.addUrl(startUrl);
-                // queue.addUrl(startUrl);
 
                 log.info("Processing init crawl request on machine " + config.get(WORKER_INDEX));
                 context = cluster.submitTopology("Crawler", config, workerJob.getTopology());

@@ -73,7 +73,9 @@ public class LinkFilterBolt implements IRichBolt {
         }
 
         database.addUrl(url);
-        queue.addUrl(url);
+        synchronized (queue) {
+            queue.addUrl(url);
+        }
         logger.debug(url + ": added to queue");
         return true;
     }
