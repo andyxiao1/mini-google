@@ -1,7 +1,13 @@
 package edu.upenn.cis.cis455.storage;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.AmazonServiceException;
@@ -30,15 +36,20 @@ import com.amazonaws.services.dynamodbv2.model.ScanResult;
 import com.amazonaws.services.dynamodbv2.model.TableDescription;
 import com.amazonaws.services.dynamodbv2.util.TableUtils;
 import com.amazonaws.services.dynamodbv2.util.TableUtils.TableNeverTransitionedToStateException;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+import com.amazonaws.services.s3.model.Bucket;
+import com.amazonaws.services.s3.model.PutObjectRequest;
 
-public class DynamoDBInstance {
+public class AWSInstance {
 
 	
     static AmazonDynamoDB dynamoDB;
 	private String tableName;
+	private String bucketName;
 	private int numDocs;
-    
-    public DynamoDBInstance() {
+	static AmazonS3 s3;
+    public AWSInstance() {
     	
         /*
          * The ProfileCredentialsProvider will return your [default]
@@ -55,6 +66,14 @@ public class DynamoDBInstance {
                     "location (/home/vagrant/.aws/credentials), and is in valid format.",
                     e);
         }
+        
+         s3 = AmazonS3ClientBuilder.standard()
+                .withCredentials(credentialsProvider)
+                .withRegion("us-east-1")
+                .build();
+
+        bucketName = "cis455-finalproject";
+        
         dynamoDB = AmazonDynamoDBClientBuilder.standard()
             .withCredentials(credentialsProvider)
             .withRegion("us-east-1")
@@ -100,16 +119,43 @@ public class DynamoDBInstance {
     	String content = doc.getContent();
     	
     	int id = ++numDocs;
-    	
+        String urlhash = "" + url.hashCode();
+
         Map<String, AttributeValue> item = new HashMap<String, AttributeValue>();
         
         item.put("url", new AttributeValue(url));
         item.put("id", new AttributeValue().withN(Integer.toString(id)));
-        item.put("content", new AttributeValue(content));
+        item.put("urlhash", new AttributeValue(urlhash));
         
         
         PutItemRequest putItemRequest = new PutItemRequest(tableName, item);
         PutItemResult putItemResult = dynamoDB.putItem(putItemRequest);
+        
+        createFileInS3(urlhash,content);
+        
+        
+        return id; 
+
+    }
+    
+    public int putDocument(String url, String content) {
+
+    	int id = ++numDocs;
+        String urlhash = "" + url.hashCode();
+
+        Map<String, AttributeValue> item = new HashMap<String, AttributeValue>();
+        
+        item.put("url", new AttributeValue(url));
+        item.put("id", new AttributeValue().withN(Integer.toString(id)));
+        item.put("urlhash", new AttributeValue(urlhash));
+        
+        
+        PutItemRequest putItemRequest = new PutItemRequest(tableName, item);
+        PutItemResult putItemResult = dynamoDB.putItem(putItemRequest);
+        
+        createFileInS3(urlhash,content);
+        
+        
         return id; 
 
     }
@@ -123,13 +169,46 @@ public class DynamoDBInstance {
         
     }
     
+    public void createFileInS3(String hashedUrl, String contents) {
+        for (Bucket bucket : s3.listBuckets()) {
+            System.out.println(" - " + bucket.getName());
+        }
+        try {
+			s3.putObject(new PutObjectRequest(bucketName, hashedUrl, createFile(hashedUrl, contents)));
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+    }
+    
+    /**
+     * Creates a temporary file with text data to demonstrate uploading a file
+     * to Amazon S3
+     *
+     * @return A newly created temporary file with text data.
+     *
+     * @throws IOException
+     */
+    private static File createFile(String filename, String content) throws IOException {
+        File file = File.createTempFile("filename", ".txt");
+        file.deleteOnExit();
+
+        Writer writer = new OutputStreamWriter(new FileOutputStream(file));
+        writer.write(content);
+
+        writer.close();
+
+        return file;
+    }
     
     // for testing purposes
     public static void main(String[] args) throws Exception {
-    	DynamoDBInstance instance = new DynamoDBInstance();
+    	AWSInstance instance = new AWSInstance();
     	System.out.println(instance.putDocument(new Document("test2","test2")));
-    	System.out.println(instance.getDocument(1));
+    	//System.out.println(instance.getDocument(1));
     }
+    
     
 
     
