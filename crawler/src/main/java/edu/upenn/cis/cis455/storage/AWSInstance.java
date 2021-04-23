@@ -43,14 +43,14 @@ import com.amazonaws.services.s3.model.PutObjectRequest;
 
 public class AWSInstance {
 
-	
+
     static AmazonDynamoDB dynamoDB;
 	private String tableName;
 	private String bucketName;
 	private int numDocs;
 	static AmazonS3 s3;
     public AWSInstance() {
-    	
+
         /*
          * The ProfileCredentialsProvider will return your [default]
          * credential profile by reading from the credentials file located at
@@ -66,19 +66,19 @@ public class AWSInstance {
                     "location (/home/vagrant/.aws/credentials), and is in valid format.",
                     e);
         }
-        
+
          s3 = AmazonS3ClientBuilder.standard()
                 .withCredentials(credentialsProvider)
                 .withRegion("us-east-1")
                 .build();
 
         bucketName = "cis455-finalproject";
-        
+
         dynamoDB = AmazonDynamoDBClientBuilder.standard()
             .withCredentials(credentialsProvider)
             .withRegion("us-east-1")
             .build();
-        
+
         tableName = "docs";
         CreateTableRequest createTableRequest = new CreateTableRequest().withTableName(tableName)
                 .withKeySchema(new KeySchemaElement().withAttributeName("name").withKeyType(KeyType.HASH))
@@ -86,8 +86,8 @@ public class AWSInstance {
                 .withProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(1L).withWriteCapacityUnits(1L));
 
             // Create table if it does not exist yet
-            
-            
+
+
         TableUtils.createTableIfNotExists(dynamoDB, createTableRequest);
         // wait for the table to move into ACTIVE state
         try {
@@ -99,80 +99,81 @@ public class AWSInstance {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-        
+
         DescribeTableRequest describeTableRequest = new DescribeTableRequest().withTableName(tableName);
         TableDescription tableDescription = dynamoDB.describeTable(describeTableRequest).getTable();
-        
+
         numDocs = Math.toIntExact(tableDescription.getItemCount());
         System.out.println("num docs: "+ numDocs);
-        
+
 
         //DescribeTableRequest describeTableRequest = new DescribeTableRequest().withTableName(tableName);
-        
+
         //TableDescription tableDescription = dynamoDB.describeTable(describeTableRequest).getTable();
-        
+
     }
-    
+
     public int putDocument(Document doc) {
-    	
-    	String url = doc.getUrl();
-    	String content = doc.getContent();
-    	
-    	int id = ++numDocs;
-        String urlhash = "" + url.hashCode();
+
+	    	String url = doc.getUrl();
+	    	String content = doc.getContent();
+
+				int id = url.hashCode();
+				String urlhash = "" + id;
+				String contentHash = "" + content.hashCode();
 
         Map<String, AttributeValue> item = new HashMap<String, AttributeValue>();
-        
+
         item.put("url", new AttributeValue(url));
         item.put("id", new AttributeValue().withN(Integer.toString(id)));
-        item.put("urlhash", new AttributeValue(urlhash));
-        
-        
+        item.put("contentHash", new AttributeValue(contentHash));
+
+
         PutItemRequest putItemRequest = new PutItemRequest(tableName, item);
         PutItemResult putItemResult = dynamoDB.putItem(putItemRequest);
-        
+
         createFileInS3(urlhash,content);
-        
-        
-        return id; 
+
+
+        return id;
 
     }
-    
+
     public int putDocument(String url, String content) {
 
-    	int id = ++numDocs;
-        String urlhash = "" + url.hashCode();
+    		int id = url.hashCode();
+        String urlhash = "" + id;
+				String contentHash = "" + content.hashCode();
 
         Map<String, AttributeValue> item = new HashMap<String, AttributeValue>();
-        
+
         item.put("url", new AttributeValue(url));
         item.put("id", new AttributeValue().withN(Integer.toString(id)));
-        item.put("urlhash", new AttributeValue(urlhash));
-        
-        
+				item.put("contentHash", new AttributeValue(contentHash));
+
+
         PutItemRequest putItemRequest = new PutItemRequest(tableName, item);
         PutItemResult putItemResult = dynamoDB.putItem(putItemRequest);
-        
+
         createFileInS3(urlhash,content);
-        
-        
-        return id; 
+
+
+        return id;
 
     }
-    
+
+/*
     public Document getDocument(int id) {
         Map<String, AttributeValue> item = new HashMap<String, AttributeValue>();
         item.put("id", new AttributeValue().withN(Integer.toString(id)));
         Map<String, AttributeValue> map = dynamoDB.getItem(tableName, item).getItem();
-        
-        return new Document(map.get("url").getS(), map.get("content").getS());
-        
-    }
-    
+
+        return new Document(map.get("url").getS());
+
+    }*/
+
     public void createFileInS3(String hashedUrl, String contents) {
-        for (Bucket bucket : s3.listBuckets()) {
-            System.out.println(" - " + bucket.getName());
-        }
+
         try {
 			s3.putObject(new PutObjectRequest(bucketName, hashedUrl, createFile(hashedUrl, contents)));
 		} catch (IOException e) {
@@ -181,7 +182,7 @@ public class AWSInstance {
 		}
 
     }
-    
+
     /**
      * Creates a temporary file with text data to demonstrate uploading a file
      * to Amazon S3
@@ -201,22 +202,22 @@ public class AWSInstance {
 
         return file;
     }
-    
+
     // for testing purposes
     public static void main(String[] args) throws Exception {
     	AWSInstance instance = new AWSInstance();
     	System.out.println(instance.putDocument(new Document("test2","test2")));
     	//System.out.println(instance.getDocument(1));
     }
-    
-    
 
-    
-    
-    
-    
-    
-    
+
+
+
+
+
+
+
+
 
 
 }
