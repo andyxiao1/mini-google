@@ -7,8 +7,6 @@ import static edu.upenn.cis.cis455.crawler.utils.Constants.*;
 
 import edu.upenn.cis.cis455.crawler.utils.URLInfo;
 import edu.upenn.cis.cis455.storage.DatabaseEnv;
-import edu.upenn.cis.cis455.storage.DynamoDBInstance;
-import edu.upenn.cis.cis455.storage.DynamoFactory;
 import edu.upenn.cis.cis455.storage.StorageFactory;
 import edu.upenn.cis.stormlite.OutputFieldsDeclarer;
 import edu.upenn.cis.stormlite.TopologyContext;
@@ -51,7 +49,6 @@ public class LinkExtractorBolt implements IRichBolt {
      * Interface for database methods.
      */
     DatabaseEnv database;
-    DynamoDBInstance dynamoDB;
 
     @Override
     public String getExecutorId() {
@@ -67,7 +64,6 @@ public class LinkExtractorBolt implements IRichBolt {
     public void prepare(Map<String, String> config, TopologyContext context, OutputCollector coll) {
         collector = coll;
         database = (DatabaseEnv) StorageFactory.getDatabaseInstance(config.get(DATABASE_DIRECTORY));
-        dynamoDB = DynamoFactory.getDatabaseInstance();
     }
 
     @Override

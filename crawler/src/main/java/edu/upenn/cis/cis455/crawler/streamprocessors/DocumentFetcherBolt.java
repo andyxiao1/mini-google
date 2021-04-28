@@ -12,6 +12,8 @@ import static edu.upenn.cis.cis455.crawler.utils.Constants.*;
 import edu.upenn.cis.cis455.crawler.utils.CrawlerState;
 import edu.upenn.cis.cis455.crawler.utils.HTTP;
 import edu.upenn.cis.cis455.crawler.utils.Security;
+import edu.upenn.cis.cis455.storage.AWSFactory;
+import edu.upenn.cis.cis455.storage.AWSInstance;
 import edu.upenn.cis.cis455.storage.DatabaseEnv;
 import edu.upenn.cis.cis455.storage.StorageFactory;
 import edu.upenn.cis.stormlite.OutputFieldsDeclarer;
@@ -50,6 +52,7 @@ public class DocumentFetcherBolt implements IRichBolt {
      * Interface for database methods.
      */
     DatabaseEnv database;
+    AWSInstance awsEnv;
 
     /**
      * Max document size.
@@ -71,6 +74,8 @@ public class DocumentFetcherBolt implements IRichBolt {
         collector = coll;
         database = (DatabaseEnv) StorageFactory.getDatabaseInstance(config.get(DATABASE_DIRECTORY));
         maxDocumentSize = Integer.parseInt(config.get(MAX_DOCUMENT_SIZE)) * MEGABYTE_BYTES;
+        awsEnv = AWSFactory.getDatabaseInstance();
+
     }
 
     @Override
@@ -107,10 +112,10 @@ public class DocumentFetcherBolt implements IRichBolt {
         database.addContentSeen(hash);
 
         // Store document in database.
-        logger.info(url + ": storing document in dynamoDB");
+        logger.info(url + ": storing document in aws");
         String contentType = responseHeaders.get(CONTENT_TYPE_HEADER);
-        database.addDocument(url, content, contentType);
-        // dynamoDB.putDocument(url, document);
+        // database.addDocument(url, content, contentType);
+        awsEnv.putDocument(url, content);
         CrawlerState.count.incrementAndGet();
 
         logger.debug(getExecutorId() + " emitting content for " + url);

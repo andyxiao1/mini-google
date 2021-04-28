@@ -195,7 +195,7 @@ public class AWSInstance {
      * @throws IOException
      */
     private static File createFile(String filename, String content) throws IOException {
-        File file = File.createTempFile("filename", ".txt");
+        File file = File.createTempFile(filename, ".txt");
         file.deleteOnExit();
 
         Writer writer = new OutputStreamWriter(new FileOutputStream(file));
