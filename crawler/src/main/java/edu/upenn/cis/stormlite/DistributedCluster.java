@@ -70,7 +70,7 @@ public class DistributedCluster implements Runnable {
 
 	ObjectMapper mapper = new ObjectMapper();
 
-	ExecutorService executor = Executors.newFixedThreadPool(8);
+	ExecutorService executor = Executors.newFixedThreadPool(10);
 
 	FairTaskQueue fairTaskQueue = new FairTaskQueue();
 

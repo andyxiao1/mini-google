@@ -39,7 +39,7 @@ public class CrawlWorker {
     AtomicBoolean isRunning = new AtomicBoolean(true);
 
     public CrawlWorker(int myPort, String masterAddress, String storageDirectory) {
-        log.info("Crawl worker node startup, on port" + myPort);
+        log.info("Crawl worker node startup, on port " + myPort);
 
         port = myPort;
         masterAddr = masterAddress;
