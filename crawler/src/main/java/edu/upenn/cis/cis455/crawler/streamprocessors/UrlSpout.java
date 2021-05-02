@@ -1,5 +1,6 @@
 package edu.upenn.cis.cis455.crawler.streamprocessors;
 
+import java.net.MalformedURLException;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -90,8 +91,9 @@ public class UrlSpout implements IRichSpout {
             // Note: We end early and don't update the queue order at all, so the same
             // domain/url will be at the head.
             if (!queue.hasRobotsInfo(domain)) {
-                logger.debug(domain + ": retrieving associated robots.txt information");
+                logger.debug(domain + ": fetching robots.txt start");
                 fetchRobotsInfo(domain);
+                logger.debug(domain + ": fetching robots.txt end");
                 return true;
             }
 
@@ -102,10 +104,12 @@ public class UrlSpout implements IRichSpout {
             // last request to this domain. If not, skip this domain.
             if (!hasCrawlDelayPassed(lastAccessedTime, robotsInfo)) {
                 queue.skipDomain();
+                logger.debug(domain + "crawl delay: " + robotsInfo.crawlDelay);
                 return true;
             }
 
             String url = queue.removeUrl();
+            logger.debug(url + ": removed from queue");
 
             // Check that url is not disallowed. If it is disallowed, drop it.
             if (!isUrlAllowed(url, robotsInfo)) {
@@ -161,7 +165,7 @@ public class UrlSpout implements IRichSpout {
      * Check to see if enough time has passed to make a new request to the domain.
      */
     private boolean hasCrawlDelayPassed(long lastAccessedTime, RobotsInfo robotsInfo) {
-        if (lastAccessedTime == -1) {
+        if (lastAccessedTime == -1 || robotsInfo.crawlDelay == 0) {
             return true;
         }
 
@@ -174,7 +178,12 @@ public class UrlSpout implements IRichSpout {
      * Check if url is in robots.txt's disallowed paths.
      */
     private boolean isUrlAllowed(String url, RobotsInfo robotsInfo) {
-        String filePath = (new URLInfo(url)).getFilePath();
+        String filePath = null;
+        try {
+            filePath = (new URLInfo(url)).getFilePath();
+        } catch (MalformedURLException e) {
+            return false;
+        }
         for (String disallowedPath : robotsInfo.disallowedPaths) {
             if (filePath.startsWith(disallowedPath)) {
                 return false;

@@ -206,11 +206,12 @@ public class CrawlMaster {
         LinkFilterBolt linkFilterBolt = new LinkFilterBolt();
         TopologyBuilder builder = new TopologyBuilder();
 
-        builder.setSpout(URL_SPOUT, urlSpout, 10);
-        builder.setBolt(DOC_FETCHER_BOLT, docFetcherBolt, 10).fieldsGrouping(URL_SPOUT, new Fields("domain"));
-        builder.setBolt(LINK_EXTRACTOR_BOLT, linkExtractorBolt, 1).fieldsGrouping(DOC_FETCHER_BOLT,
+        builder.setSpout(URL_SPOUT, urlSpout, 100);
+        builder.setBolt(DOC_FETCHER_BOLT, docFetcherBolt, 100).fieldsGrouping(URL_SPOUT, new Fields("domain"));
+        builder.setBolt(LINK_EXTRACTOR_BOLT, linkExtractorBolt, 100).fieldsGrouping(DOC_FETCHER_BOLT,
                 new Fields("domain"));
-        builder.setBolt(LINK_FILTER_BOLT, linkFilterBolt, 1).fieldsGrouping(LINK_EXTRACTOR_BOLT, new Fields("domain"));
+        builder.setBolt(LINK_FILTER_BOLT, linkFilterBolt, 100).fieldsGrouping(LINK_EXTRACTOR_BOLT,
+                new Fields("domain"));
 
         return builder.createTopology();
     }

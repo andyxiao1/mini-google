@@ -33,7 +33,7 @@ import edu.upenn.cis.stormlite.tasks.ITask;
 public class TopologyContext {
     Topology topology;
 
-    Queue<ITask> taskQueue;
+    FairTaskQueue fairTaskQueue;
 
     public static enum STATE {
         IDLE, MAPPING, WAITING, REDUCING
@@ -54,9 +54,9 @@ public class TopologyContext {
      */
     Map<String, StreamRouter> next = new HashMap<>();
 
-    public TopologyContext(Topology topo, Queue<ITask> theTaskQueue) {
+    public TopologyContext(Topology topo, FairTaskQueue theTaskQueue) {
         topology = topo;
-        taskQueue = theTaskQueue;
+        fairTaskQueue = theTaskQueue;
     }
 
     public Topology getTopology() {
@@ -67,8 +67,8 @@ public class TopologyContext {
         this.topology = topo;
     }
 
-    public void addStreamTask(ITask next) {
-        taskQueue.add(next);
+    public void addStreamTask(String className, ITask next) {
+        fairTaskQueue.addTask(className, next);
     }
 
     public STATE getState() {

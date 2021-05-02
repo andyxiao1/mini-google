@@ -1,5 +1,6 @@
 package edu.upenn.cis.cis455.crawler.streamprocessors;
 
+import java.net.MalformedURLException;
 import java.util.Map;
 import java.util.UUID;
 
@@ -74,6 +75,7 @@ public class LinkExtractorBolt implements IRichBolt {
         String contentType = input.getStringByField("contentType");
 
         logger.debug(getExecutorId() + " received document for " + url);
+        logger.debug(url + ": extracting links, type=" + contentType);
 
         // Only parse html documents for links.
         if (contentType == null || !contentType.equals(HTML_CONTENT_TYPE)) {
@@ -82,15 +84,21 @@ public class LinkExtractorBolt implements IRichBolt {
         }
 
         // Parse for links and emit.
-        logger.debug(url + ": parsing");
+        logger.debug(url + ": parse start");
         Document doc = Jsoup.parse(document, url);
         Elements links = doc.getElementsByAttribute("href");
         for (Element link : links) {
             String linkHref = link.attr("abs:href");
             logger.debug(getExecutorId() + " emitting new link " + linkHref);
-            String domain = (new URLInfo(linkHref)).getBaseUrl();
+            String domain = null;
+            try {
+                domain = (new URLInfo(linkHref)).getBaseUrl();
+            } catch (MalformedURLException e) {
+                continue;
+            }
             collector.emit(new Values<Object>(domain, linkHref), getExecutorId());
         }
+        logger.debug(url + ": parse end, total links emitted=" + links.size());
         return true;
     }
 

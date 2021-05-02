@@ -62,6 +62,7 @@ public class LinkFilterBolt implements IRichBolt {
     public boolean execute(Tuple input) {
         String url = input.getStringByField("url");
         logger.debug(getExecutorId() + " received " + url);
+        logger.debug(url + ": filtering");
 
         if (url == null || url.equals("")) {
             return true;

@@ -21,17 +21,16 @@ import edu.upenn.cis.stormlite.bolt.IRichBolt;
 import edu.upenn.cis.stormlite.tuple.Tuple;
 
 /**
- * This is a simple task that, when scheduled, processes
- * a tuple through a bolt.
- * 
+ * This is a simple task that, when scheduled, processes a tuple through a bolt.
+ *
  * @author zives
  *
  */
 public class BoltTask implements ITask {
-	
+
 	IRichBolt bolt;
 	Tuple tuple;
-	
+
 	public BoltTask(IRichBolt bolt, Tuple tuple) {
 		this.bolt = bolt;
 		this.tuple = tuple;
@@ -46,7 +45,7 @@ public class BoltTask implements ITask {
 
 	@Override
 	public String toString() {
-		return bolt.getClass().getName() + " (" + bolt.getExecutorId() + "): " + tuple.toString();
+		return bolt.getClass().getName() + " (" + bolt.getExecutorId() + ")";
 	}
 
 	@Override

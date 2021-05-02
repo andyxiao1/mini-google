@@ -1,5 +1,6 @@
 package edu.upenn.cis.cis455.crawler.worker;
 
+import java.net.MalformedURLException;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -39,6 +40,10 @@ public class CrawlerQueue {
 
         public UrlQueue(String hostname) {
             domain = hostname;
+        }
+
+        public String toString() {
+            return domain + "=" + size();
         }
     }
 
@@ -134,7 +139,12 @@ public class CrawlerQueue {
      * Add a new url to the CrawlerQueue.
      */
     public void addUrl(String url) {
-        String domain = (new URLInfo(url)).getBaseUrl();
+        String domain = null;
+        try {
+            domain = (new URLInfo(url)).getBaseUrl();
+        } catch (MalformedURLException e) {
+            return;
+        }
 
         if (!domainMap.containsKey(domain)) {
             UrlQueue urlQueue = new UrlQueue(domain);
@@ -171,5 +181,18 @@ public class CrawlerQueue {
 
     public boolean isEmpty() {
         return domainQueue.isEmpty();
+    }
+
+    public String toString() {
+        // String res = "CRAWLER QUEUE:[";
+        int size = 0;
+        for (String key : domainMap.keySet()) {
+            // res += domainMap.get(key).toString() + ",";
+            size += domainMap.get(key).size();
+        }
+        // res = res.substring(0, res.length() - 1) + "]\n";
+        // res += "size=" + size;
+        // return res;
+        return "size=" + size;
     }
 }

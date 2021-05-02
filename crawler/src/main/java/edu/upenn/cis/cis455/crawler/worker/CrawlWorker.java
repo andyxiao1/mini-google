@@ -182,6 +182,7 @@ public class CrawlWorker {
     private void shutdown() {
         System.out.println(database);
         System.out.println("Crawl Count: " + CrawlerState.count.get());
+        System.out.println(CrawlerQueue.getSingleton());
 
         CrawlerState.isShutdown.set(true);
         cluster.killTopology("");

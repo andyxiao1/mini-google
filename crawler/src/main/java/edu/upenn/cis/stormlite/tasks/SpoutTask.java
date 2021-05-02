@@ -23,15 +23,15 @@ import edu.upenn.cis.stormlite.spout.IRichSpout;
 
 /**
  * This is a simple task that retrieves a tuple from a spout
- * 
+ *
  * @author zives
  *
  */
 public class SpoutTask implements ITask {
-	
+
 	IRichSpout spout;
 	Queue<ITask> queue;
-	
+
 	public SpoutTask(IRichSpout theSpout, Queue<ITask> theQueue) {
 		spout = theSpout;
 		queue = theQueue;
@@ -39,15 +39,12 @@ public class SpoutTask implements ITask {
 
 	@Override
 	public void run() {
-		synchronized (spout ) {
-			boolean remaining = spout.nextTuple();
-			
-			// Schedule ourselves again at the end of the queue
-			if (remaining)
-				queue.add(this);
+		synchronized (spout) {
+			queue.add(this);
+			spout.nextTuple();
 		}
 	}
-	
+
 	@Override
 	public String toString() {
 		return spout.getClass().getName() + "/" + spout.getExecutorId();

@@ -53,7 +53,7 @@ public class Document {
     public String toString() {
         StringBuffer buffer = new StringBuffer("Document[");
         buffer.append("id=").append(id).append(",url=").append(url).append(",content=")
-                .append(content.substring(0, Integer.min(content.length(), 10))).append("]");
+                .append(content.substring(0, Integer.min(content.length(), 40))).append("]");
         return buffer.toString() + "\n";
     }
 }

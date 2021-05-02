@@ -83,20 +83,22 @@ public class DocumentFetcherBolt implements IRichBolt {
         String domain = input.getStringByField("domain");
         String url = input.getStringByField("url");
         logger.debug(getExecutorId() + " received " + url);
+        logger.debug(url + ": received by document fetcher");
 
-        // Validate url document with HEAD request according to content type and length.
+        // Validate url document with HEAD request according to content type.
         // If the url isn't valid, we drop it.
         logger.debug(url + ": validating document with head request");
         Map<String, String> responseHeaders = new HashMap<String, String>();
 
         if (!isDocumentValid(url, responseHeaders)) {
             logger.debug(url + ": document is invalid");
+            logger.debug(url + " type: " + responseHeaders.get("Content-Type"));
             return true;
         }
         logger.debug(url + ": validated");
 
-        String content = HTTP.makeRequest(url, GET_REQUEST, maxDocumentSize, null);
         logger.info(url + ": downloading");
+        String content = HTTP.makeRequest(url, GET_REQUEST, maxDocumentSize, null);
 
         if (content == null) {
             logger.error(url + ": error fetching document");
@@ -114,8 +116,8 @@ public class DocumentFetcherBolt implements IRichBolt {
         // Store document in database.
         logger.info(url + ": storing document in aws");
         String contentType = responseHeaders.get(CONTENT_TYPE_HEADER);
-        // database.addDocument(url, content, contentType);
-        awsEnv.putDocument(url, content);
+        database.addDocument(url, content, contentType);
+        // awsEnv.putDocument(url, content);
         CrawlerState.count.incrementAndGet();
 
         logger.debug(getExecutorId() + " emitting content for " + url);

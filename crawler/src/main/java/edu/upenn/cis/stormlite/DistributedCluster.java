@@ -22,7 +22,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -73,7 +72,7 @@ public class DistributedCluster implements Runnable {
 
 	ExecutorService executor = Executors.newFixedThreadPool(5);
 
-	Queue<ITask> taskQueue = new ConcurrentLinkedQueue<ITask>();
+	FairTaskQueue fairTaskQueue = new FairTaskQueue();
 
 	/**
 	 * Sets up the topology, instantiating objects (executors) on the local machine.
@@ -91,7 +90,7 @@ public class DistributedCluster implements Runnable {
 	public TopologyContext submitTopology(String name, Config config, Topology topo) throws ClassNotFoundException {
 		theTopology = name;
 
-		context = new TopologyContext(topo, taskQueue);
+		context = new TopologyContext(topo, fairTaskQueue);
 
 		boltStreams.clear();
 		spoutStreams.clear();
@@ -100,6 +99,8 @@ public class DistributedCluster implements Runnable {
 		createSpoutInstances(topo, config);
 
 		createBoltInstances(topo, config);
+
+		fairTaskQueue.addClass(SenderBolt.class.getName());
 
 		createRoutes(topo, config);
 		scheduleSpouts();
@@ -121,13 +122,22 @@ public class DistributedCluster implements Runnable {
 	 */
 	public void run() {
 		while (!quit.get()) {
-			ITask task = taskQueue.poll();
-			if (task == null)
+			Queue<ITask> taskQueue = fairTaskQueue.nextQueue();
+
+			if (taskQueue == null) {
+				log.error("Fair task queue empty");
 				Thread.yield();
-			else {
-				// log.debug("Task: " + task.toString());
-				executor.execute(task);
+				continue;
 			}
+
+			ITask task = taskQueue.poll();
+			if (task == null) {
+				Thread.yield();
+				continue;
+			}
+
+			// log.info("Task: " + task.toString());
+			executor.execute(task);
 		}
 		executor.shutdown();
 	}
@@ -138,7 +148,9 @@ public class DistributedCluster implements Runnable {
 	private void scheduleSpouts() {
 		for (String key : spoutStreams.keySet())
 			for (IRichSpout spout : spoutStreams.get(key)) {
-				taskQueue.add(new SpoutTask(spout, taskQueue));
+				String className = spout.getClass().getName();
+				Queue<ITask> taskQueue = fairTaskQueue.getQueue(className);
+				fairTaskQueue.addTask(className, new SpoutTask(spout, taskQueue));
 			}
 	}
 
@@ -152,6 +164,8 @@ public class DistributedCluster implements Runnable {
 	private void createSpoutInstances(Topology topo, Config config) throws ClassNotFoundException {
 		for (String key : topo.getSpouts().keySet()) {
 			StringIntPair spout = topo.getSpout(key);
+
+			fairTaskQueue.addClass(spout.getLeft());
 
 			spoutStreams.put(key, new ArrayList<IRichSpout>());
 			for (int i = 0; i < spout.getRight(); i++)
@@ -182,6 +196,8 @@ public class DistributedCluster implements Runnable {
 	private void createBoltInstances(Topology topo, Config config) throws ClassNotFoundException {
 		for (String key : topo.getBolts().keySet()) {
 			StringIntPair bolt = topo.getBolt(key);
+
+			fairTaskQueue.addClass(bolt.getLeft());
 
 			boltStreams.put(key, new ArrayList<IRichBolt>());
 			int localExecutors = bolt.getRight();

@@ -259,16 +259,19 @@ public class DatabaseEnv implements StorageInterface {
     public synchronized String toString() {
 
         // Print documents
-        EntityCursor<Document> documents = documentById.entities();
-        int count = 0;
+        // EntityCursor<Document> documents = documentById.entities();
+        // int count = 0;
         String res = "=======================================\n";
 
-        for (Document document : documents) {
-            res += document;
-            count++;
-        }
-        documents.close();
-        res += "Number of documents: " + count + "\n";
+        // for (Document document : documents) {
+        // res += document;
+        // count++;
+        // if (count >= 10) {
+        // break;
+        // }
+        // }
+        // documents.close();
+        res += "Number of documents: " + documentById.count() + "\n";
         res += "=======================================\n";
 
         // // Print content seen
@@ -283,13 +286,16 @@ public class DatabaseEnv implements StorageInterface {
         res += "Number of hash contents seen: " + contentSeenByHash.count() + "\n";
         res += "=======================================\n";
 
-        // // Print urls seen
+        // Print urls seen
         // EntityCursor<UrlSeen> urls = urlSeenByUrl.entities();
         // count = 0;
 
         // for (UrlSeen url : urls) {
         // res += url;
         // count++;
+        // if (count >= 10) {
+        // break;
+        // }
         // }
         // urls.close();
         res += "Number of urls seen: " + urlSeenByUrl.count() + "\n";
