@@ -68,9 +68,10 @@ public class CrawlWorker {
                 workerJob = om.readValue(request.body(), WorkerJob.class);
                 Config config = workerJob.getConfig();
                 config.put(DATABASE_DIRECTORY, storageDir);
+                int crawlThreads = Integer.parseInt(config.get(THREAD_COUNT));
 
                 log.info("Processing init crawl request on machine " + config.get(WORKER_INDEX));
-                context = cluster.submitTopology("Crawler", config, workerJob.getTopology());
+                context = cluster.submitTopology("Crawler", config, workerJob.getTopology(), crawlThreads);
 
                 return "Job launched";
             } catch (ClassNotFoundException | IOException e) {

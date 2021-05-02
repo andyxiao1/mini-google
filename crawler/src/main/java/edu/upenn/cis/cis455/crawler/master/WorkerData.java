@@ -37,6 +37,6 @@ public class WorkerData {
         // Example: port=8002, status=IDLE, job=Foo, keysRead=2, keysWritten=2,
         // results=[(a, 1),(b,1)]
 
-        return "port=" + port + ", count=" + count;
+        return "ip=" + ip + ", port=" + port + ", count=" + count;
     }
 }

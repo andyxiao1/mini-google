@@ -36,34 +36,37 @@ public class CrawlMaster {
     static Logger log = LogManager.getLogger(CrawlMaster.class);
 
     Integer maxDocSize;
-    Integer maxCrawlCount;
+    Integer crawlThreads;
     List<String> seedUrls;
 
     List<String> workers = new ArrayList<String>();
     Map<String, WorkerData> workerLookup = new HashMap<String, WorkerData>();
     AtomicBoolean isRunning = new AtomicBoolean(true);
 
-    public CrawlMaster(int port, String seedUrlFile, Integer maxSize, Integer count) {
+    public CrawlMaster(int port, String seedUrlFile, Integer maxSize, Integer threadCount) {
         log.info("Crawl master node startup, on port " + port);
 
         port(port);
         maxDocSize = maxSize;
-        maxCrawlCount = count;
+        crawlThreads = threadCount;
         seedUrls = UrlReader.readSeedUrls(seedUrlFile);
 
-        defineStatusRoute();
+        defineHomeRoute();
         defineStartCrawlRoute();
         defineWorkerStatusRoute();
         defineShutdownRoute();
         setupShutdownThread();
     }
 
-    private void defineStatusRoute() {
-        get("/status", (request, response) -> {
+    private void defineHomeRoute() {
+        get("/", (request, response) -> {
             response.type("text/html");
 
             return ("<html><head><title>Master</title></head>\n" + "<body><h2>Worker Status Info</h2><div>"
-                    + getWorkerStatuses() + "</div></body></html>");
+                    + getWorkerStatuses() + "</div><br>"
+                    + "<form method=\"GET\" action=\"/startcrawl\">\r\n<button type=\"submit\">Start Crawl</button>\r\n</form>"
+                    + "<form method=\"GET\" action=\"/shutdown\">\r\n<button type=\"submit\">Shutdown</button>\r\n</form>"
+                    + "</body></html>");
         });
     }
 
@@ -74,7 +77,7 @@ public class CrawlMaster {
             // Setup StormLite topology.
             Config config = new Config();
             config.put(MAX_DOCUMENT_SIZE, maxDocSize.toString());
-            config.put(CRAWL_COUNT, maxCrawlCount.toString());
+            config.put(THREAD_COUNT, crawlThreads.toString());
             config.put(WORKER_LIST, getWorkerList());
             WorkerJob job = new WorkerJob(setupTopology(), config);
 
@@ -125,6 +128,7 @@ public class CrawlMaster {
                 System.exit(0);
             }
 
+            response.redirect("/");
             return "Started!";
         });
     }
@@ -159,6 +163,7 @@ public class CrawlMaster {
             }
 
             isRunning.set(false);
+            response.redirect("/");
             return "Shutdown has started!";
         });
     }
@@ -240,16 +245,16 @@ public class CrawlMaster {
         // Process arguments.
         if (args.length != 4) {
             System.out.println(
-                    "Usage: CrawlMaster {port number} {seed url file} {max doc size in MB} {number of files to index}");
+                    "Usage: CrawlMaster {port number} {seed url file} {max doc size in MB} {number of threads per worker}");
             System.exit(1);
         }
 
         int port = Integer.valueOf(args[0]);
         String seedUrlFile = args[1];
         Integer maxDocSize = Integer.valueOf(args[2]);
-        Integer maxCrawlCount = Integer.valueOf(args[3]);
+        Integer crawlThreads = Integer.valueOf(args[3]);
 
         // Start CrawlMaster server.
-        new CrawlMaster(port, seedUrlFile, maxDocSize, maxCrawlCount);
+        new CrawlMaster(port, seedUrlFile, maxDocSize, crawlThreads);
     }
 }

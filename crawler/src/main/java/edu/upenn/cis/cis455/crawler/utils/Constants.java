@@ -20,7 +20,7 @@ public final class Constants {
     public static final String DATABASE_DIRECTORY = "DATABASE_DIRECTORY";
     public static final String MAX_DOCUMENT_SIZE = "MAX_DOCUMENT_SIZE";
     public static final String WORKER_INDEX = "workerIndex";
-    public static final String CRAWL_COUNT = "CRAWL_COUNT";
+    public static final String THREAD_COUNT = "THREAD_COUNT";
     public static final String WORKER_LIST = "workerList";
     public static final String START_URL = "START_URL";
 

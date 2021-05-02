@@ -23,7 +23,6 @@ import java.util.List;
 import edu.upenn.cis.stormlite.IOutputCollector;
 import edu.upenn.cis.stormlite.TopologyContext;
 import edu.upenn.cis.stormlite.routers.StreamRouter;
-import edu.upenn.cis.cis455.mapreduce.Context;
 
 /**
  * Simplified version of Storm output queues
@@ -31,7 +30,7 @@ import edu.upenn.cis.cis455.mapreduce.Context;
  * @author zives
  *
  */
-public class OutputCollector implements IOutputCollector, Context {
+public class OutputCollector implements IOutputCollector {
 	List<StreamRouter> routers = new ArrayList<>();
 	TopologyContext context;
 
@@ -46,7 +45,7 @@ public class OutputCollector implements IOutputCollector, Context {
 
 	/**
 	 * Emits a tuple to the stream destination
-	 * 
+	 *
 	 * @param tuple
 	 */
 	public synchronized void emit(List<Object> tuple, String sourceExecutor) {
@@ -63,7 +62,6 @@ public class OutputCollector implements IOutputCollector, Context {
 		return routers;
 	}
 
-	@Override
 	public void write(String key, String value, String sourceExecutor) {
 		List<Object> values = new ArrayList<>();
 		values.add(key);

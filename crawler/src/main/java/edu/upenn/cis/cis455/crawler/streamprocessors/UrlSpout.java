@@ -54,8 +54,6 @@ public class UrlSpout implements IRichSpout {
      */
     DatabaseEnv database;
 
-    int maxCount;
-
     @Override
     public String getExecutorId() {
         return executorId;
@@ -71,7 +69,6 @@ public class UrlSpout implements IRichSpout {
         collector = coll;
         queue = CrawlerQueue.getSingleton();
         database = (DatabaseEnv) StorageFactory.getDatabaseInstance(config.get(DATABASE_DIRECTORY));
-        maxCount = Integer.parseInt(config.get(CRAWL_COUNT));
     }
 
     @Override

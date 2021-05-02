@@ -70,7 +70,7 @@ public class DistributedCluster implements Runnable {
 
 	ObjectMapper mapper = new ObjectMapper();
 
-	ExecutorService executor = Executors.newFixedThreadPool(10);
+	ExecutorService executor;
 
 	FairTaskQueue fairTaskQueue = new FairTaskQueue();
 
@@ -87,9 +87,11 @@ public class DistributedCluster implements Runnable {
 	 * @return
 	 * @throws ClassNotFoundException
 	 */
-	public TopologyContext submitTopology(String name, Config config, Topology topo) throws ClassNotFoundException {
-		theTopology = name;
+	public TopologyContext submitTopology(String name, Config config, Topology topo, int threads)
+			throws ClassNotFoundException {
 
+		executor = Executors.newFixedThreadPool(threads);
+		theTopology = name;
 		context = new TopologyContext(topo, fairTaskQueue);
 
 		boltStreams.clear();
@@ -307,15 +309,6 @@ public class DistributedCluster implements Runnable {
 			while (!quit.get())
 				Thread.yield();
 		}
-
-		// TODO: delete
-		// System.out.println(context.getMapOutputs() + " local map outputs and " +
-		// context.getReduceOutputs()
-		// + " local reduce outputs.");
-
-		// for (String key : context.getSendOutputs().keySet())
-		// System.out.println("Sent " + context.getSendOutputs().get(key) + " to " +
-		// key);
 	}
 
 	/**
