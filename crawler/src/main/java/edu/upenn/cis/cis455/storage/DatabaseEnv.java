@@ -9,7 +9,6 @@ import com.sleepycat.je.Environment;
 import com.sleepycat.je.EnvironmentConfig;
 import com.sleepycat.je.SequenceConfig;
 import com.sleepycat.je.Transaction;
-import com.sleepycat.persist.EntityCursor;
 import com.sleepycat.persist.EntityStore;
 import com.sleepycat.persist.PrimaryIndex;
 import com.sleepycat.persist.SecondaryIndex;
@@ -18,7 +17,7 @@ import com.sleepycat.persist.StoreConfig;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-public class DatabaseEnv implements StorageInterface {
+public class DatabaseEnv {
 
     static final Logger logger = LogManager.getLogger(DatabaseEnv.class);
 
@@ -74,12 +73,10 @@ public class DatabaseEnv implements StorageInterface {
     // Document Methods
     ///////////////////////////////////////////////////
 
-    @Override
     public synchronized int getCorpusSize() {
         return (int) documentById.count();
     }
 
-    @Override
     public synchronized int addDocument(String url, String documentContents) {
         return addDocument(url, documentContents, "");
     }
@@ -103,7 +100,6 @@ public class DatabaseEnv implements StorageInterface {
         return doc.id;
     }
 
-    @Override
     public synchronized String getDocument(String url) {
         Document doc = documentByUrl.get(url);
         return doc.content;
@@ -236,7 +232,6 @@ public class DatabaseEnv implements StorageInterface {
     // Database Methods
     ///////////////////////////////////////////////////
 
-    @Override
     public synchronized void close() {
         if (store != null) {
             try {

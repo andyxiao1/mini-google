@@ -55,7 +55,7 @@ public class LinkFilterBolt implements IRichBolt {
     @Override
     public void prepare(Map<String, String> config, TopologyContext context, OutputCollector coll) {
         queue = CrawlerQueue.getSingleton();
-        database = (DatabaseEnv) StorageFactory.getDatabaseInstance(config.get(DATABASE_DIRECTORY));
+        database = StorageFactory.getDatabaseInstance(config.get(DATABASE_DIRECTORY));
     }
 
     @Override

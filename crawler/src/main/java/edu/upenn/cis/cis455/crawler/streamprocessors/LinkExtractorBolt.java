@@ -64,7 +64,7 @@ public class LinkExtractorBolt implements IRichBolt {
     @Override
     public void prepare(Map<String, String> config, TopologyContext context, OutputCollector coll) {
         collector = coll;
-        database = (DatabaseEnv) StorageFactory.getDatabaseInstance(config.get(DATABASE_DIRECTORY));
+        database = StorageFactory.getDatabaseInstance(config.get(DATABASE_DIRECTORY));
     }
 
     @Override

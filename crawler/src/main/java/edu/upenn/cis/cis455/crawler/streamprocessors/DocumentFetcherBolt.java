@@ -1,8 +1,5 @@
 package edu.upenn.cis.cis455.crawler.streamprocessors;
 
-import java.time.Instant;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -72,7 +69,7 @@ public class DocumentFetcherBolt implements IRichBolt {
     @Override
     public void prepare(Map<String, String> config, TopologyContext context, OutputCollector coll) {
         collector = coll;
-        database = (DatabaseEnv) StorageFactory.getDatabaseInstance(config.get(DATABASE_DIRECTORY));
+        database = StorageFactory.getDatabaseInstance(config.get(DATABASE_DIRECTORY));
         maxDocumentSize = Integer.parseInt(config.get(MAX_DOCUMENT_SIZE)) * MEGABYTE_BYTES;
         awsEnv = AWSFactory.getDatabaseInstance();
 
@@ -144,7 +141,7 @@ public class DocumentFetcherBolt implements IRichBolt {
     ///////////////////////////////////////////////////
 
     /**
-     * Makes a HEAD request to check if document content type and length are valid.
+     * Makes a HEAD request to check if document content type is valid.
      */
     private boolean isDocumentValid(String url, Map<String, String> responseHeaders) {
 
@@ -157,21 +154,7 @@ public class DocumentFetcherBolt implements IRichBolt {
 
         // NOTE: Got rid of content length because a lot of sites don't send it on head
         // requests.
-        // int contentLength = -1;
-        // try {
-        // contentLength = Integer.parseInt(responseHeaders.get(CONTENT_LENGTH_HEADER));
-        // } catch (NumberFormatException e) {
-        // logger.error("Error validating document: Content-Length is not a valid number
-        // - " + responseHeaders.get(CONTENT_LENGTH_HEADER));
-        // logger.error(e);
-        // return false;
-        // }
         String contentType = responseHeaders.get(CONTENT_TYPE_HEADER);
-
-        // if (contentLength > maxDocumentSize) {
-        // logger.debug(url + ": file too big");
-        // return false;
-        // }
 
         if (contentType == null || !VALID_FILE_TYPES_SET.contains(contentType) && !contentType.endsWith("+xml")) {
             logger.debug(url + ": invalid file type");
@@ -179,16 +162,5 @@ public class DocumentFetcherBolt implements IRichBolt {
         }
 
         return true;
-    }
-
-    /**
-     * Converts a HTTP date to epoch time.
-     */
-    private long convertDateToEpoch(String date) {
-        if (date == null) {
-            return -1;
-        }
-        Instant dateInstant = ZonedDateTime.parse(date, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant();
-        return dateInstant.toEpochMilli();
     }
 }

@@ -48,8 +48,7 @@ public class CrawlWorker {
         om = new ObjectMapper();
         om.enableDefaultTyping(ObjectMapper.DefaultTyping.NON_FINAL);
 
-        database = (DatabaseEnv) StorageFactory.getDatabaseInstance(storageDir);
-        // System.out.println(database);
+        database = StorageFactory.getDatabaseInstance(storageDir);
         // database.resetRun();
 
         port(port);

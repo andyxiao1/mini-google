@@ -68,7 +68,7 @@ public class UrlSpout implements IRichSpout {
     public void open(Map<String, String> config, TopologyContext context, SpoutOutputCollector coll) {
         collector = coll;
         queue = CrawlerQueue.getSingleton();
-        database = (DatabaseEnv) StorageFactory.getDatabaseInstance(config.get(DATABASE_DIRECTORY));
+        database = StorageFactory.getDatabaseInstance(config.get(DATABASE_DIRECTORY));
     }
 
     @Override
