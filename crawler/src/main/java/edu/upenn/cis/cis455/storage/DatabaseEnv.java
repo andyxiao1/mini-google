@@ -73,10 +73,6 @@ public class DatabaseEnv {
     // Document Methods
     ///////////////////////////////////////////////////
 
-    public synchronized int getCorpusSize() {
-        return (int) documentById.count();
-    }
-
     public synchronized int addDocument(String url, String documentContents) {
         return addDocument(url, documentContents, "");
     }

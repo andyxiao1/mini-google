@@ -17,11 +17,6 @@
  */
 package edu.upenn.cis.stormlite;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Queue;
-
-import edu.upenn.cis.stormlite.routers.StreamRouter;
 import edu.upenn.cis.stormlite.tasks.ITask;
 
 /**
@@ -34,25 +29,6 @@ public class TopologyContext {
     Topology topology;
 
     FairTaskQueue fairTaskQueue;
-
-    public static enum STATE {
-        IDLE, MAPPING, WAITING, REDUCING
-    };
-
-    STATE state = STATE.IDLE;
-
-    int mapOutputs = 0;
-
-    int reduceOutputs = 0;
-
-    int keysRead = 0;
-
-    Map<String, Integer> sendOutputs = new HashMap<>();
-
-    /**
-     * Mappings from stream IDs to routers
-     */
-    Map<String, StreamRouter> next = new HashMap<>();
 
     public TopologyContext(Topology topo, FairTaskQueue theTaskQueue) {
         topology = topo;
@@ -70,48 +46,4 @@ public class TopologyContext {
     public void addStreamTask(String className, ITask next) {
         fairTaskQueue.addTask(className, next);
     }
-
-    public STATE getState() {
-        return state;
-    }
-
-    public void setState(STATE state) {
-        this.state = state;
-    }
-
-    public int getMapOutputs() {
-        return mapOutputs;
-    }
-
-    public void incMapOutputs(String key) {
-        this.mapOutputs++;
-    }
-
-    public int getReduceOutputs() {
-        return reduceOutputs;
-    }
-
-    public void incReduceOutputs(String key) {
-        this.reduceOutputs++;
-    }
-
-    public void incKeysRead() {
-        keysRead++;
-    }
-
-    public int getKeysRead() {
-        return keysRead;
-    }
-
-    public void incSendOutputs(String key) {
-        if (!sendOutputs.containsKey(key))
-            sendOutputs.put(key, Integer.valueOf(0));
-
-        sendOutputs.put(key, Integer.valueOf(sendOutputs.get(key) + 1));
-    }
-
-    public Map<String, Integer> getSendOutputs() {
-        return sendOutputs;
-    }
-
 }
