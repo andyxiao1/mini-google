@@ -42,6 +42,8 @@ public class CrawlMaster {
     List<String> workers = new ArrayList<String>();
     Map<String, WorkerData> workerLookup = new HashMap<String, WorkerData>();
     AtomicBoolean isRunning = new AtomicBoolean(true);
+    long crawlStartTime = -1;
+    long crawlTotal = 0;
 
     public CrawlMaster(int port, String seedUrlFile, Integer maxSize, Integer threadCount) {
         log.info("Crawl master node startup, on port " + port);
@@ -66,13 +68,14 @@ public class CrawlMaster {
                     + getWorkerStatuses() + "</div><br>"
                     + "<form method=\"GET\" action=\"/startcrawl\">\r\n<button type=\"submit\">Start Crawl</button>\r\n</form>"
                     + "<form method=\"GET\" action=\"/shutdown\">\r\n<button type=\"submit\">Shutdown</button>\r\n</form>"
-                    + "</body></html>");
+                    + getTimeStatus() + "</body></html>");
         });
     }
 
     private void defineStartCrawlRoute() {
         get("/startcrawl", (request, response) -> {
             log.info("Received crawl start command");
+            crawlStartTime = System.currentTimeMillis();
 
             // Setup StormLite topology.
             Config config = new Config();
@@ -235,8 +238,22 @@ public class CrawlMaster {
                 }
             }
         }
+        crawlTotal = total;
         res += "total: " + total + "<br>";
         return res;
+    }
+
+    private String getTimeStatus() {
+        if (crawlStartTime == -1) {
+            return "";
+        }
+        long totalSeconds = (System.currentTimeMillis() - crawlStartTime) / 1000;
+        long hours = totalSeconds / 60 / 60;
+        long minutes = (totalSeconds % (60 * 60)) / 60;
+        long seconds = totalSeconds % 60;
+
+        return "<h2>Time Info</h2><div>Total Seconds: " + totalSeconds + "<br>Hours: " + hours + "<br>Minutes: "
+                + minutes + "<br>Seconds: " + seconds + "<br>Rate: " + crawlTotal / totalSeconds + "</div>";
     }
 
     public static void main(String[] args) {

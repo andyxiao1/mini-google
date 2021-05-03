@@ -5,7 +5,6 @@ import java.util.UUID;
 
 import static edu.upenn.cis.cis455.crawler.utils.Constants.*;
 
-import edu.upenn.cis.cis455.crawler.worker.CrawlerQueue;
 import edu.upenn.cis.cis455.storage.DatabaseEnv;
 import edu.upenn.cis.cis455.storage.StorageFactory;
 import edu.upenn.cis.stormlite.OutputFieldsDeclarer;
@@ -34,11 +33,6 @@ public class LinkFilterBolt implements IRichBolt {
     String executorId = UUID.randomUUID().toString();
 
     /**
-     * Domain based frontier queue for urls to be processed.
-     */
-    CrawlerQueue queue;
-
-    /**
      * Interface for database methods.
      */
     DatabaseEnv database;
@@ -54,7 +48,6 @@ public class LinkFilterBolt implements IRichBolt {
 
     @Override
     public void prepare(Map<String, String> config, TopologyContext context, OutputCollector coll) {
-        queue = CrawlerQueue.getSingleton();
         database = StorageFactory.getDatabaseInstance(config.get(DATABASE_DIRECTORY));
     }
 
@@ -73,10 +66,8 @@ public class LinkFilterBolt implements IRichBolt {
             return true;
         }
 
+        database.addUrlSeen(url);
         database.addUrl(url);
-        synchronized (queue) {
-            queue.addUrl(url);
-        }
         logger.debug(url + ": added to queue");
         return true;
     }

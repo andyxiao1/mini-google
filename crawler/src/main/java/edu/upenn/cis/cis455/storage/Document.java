@@ -11,7 +11,7 @@ import com.sleepycat.persist.model.SecondaryKey;
 public class Document {
 
     @PrimaryKey(sequence = "docId")
-    public int id;
+    public long id;
 
     @SecondaryKey(relate = Relationship.ONE_TO_ONE)
     public String url;
