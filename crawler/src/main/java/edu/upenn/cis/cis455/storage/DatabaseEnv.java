@@ -230,6 +230,7 @@ public class DatabaseEnv {
 
         // Only reset the front and back ids if the queue isn't empty.
         if (queues.next() == null) {
+            queues.close();
             return;
         }
 
