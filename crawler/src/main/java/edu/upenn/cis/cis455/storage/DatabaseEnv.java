@@ -82,6 +82,8 @@ public class DatabaseEnv {
             logger.error("Error opening environment and store");
             logger.error(dbe);
         }
+
+        initializeCrawlQueue();
     }
 
     ///////////////////////////////////////////////////
@@ -223,6 +225,19 @@ public class DatabaseEnv {
         return nextUrl;
     }
 
+    public synchronized void initializeCrawlQueue() {
+        EntityCursor<CrawlQueue> queues = crawlQueueById.entities();
+
+        // Only reset the front and back ids if the queue isn't empty.
+        if (queues.next() == null) {
+            return;
+        }
+
+        CrawlQueue.frontId = queues.next().id;
+        CrawlQueue.endId = queues.last().id;
+        queues.close();
+    }
+
     ///////////////////////////////////////////////////
     // Document Methods
     ///////////////////////////////////////////////////
@@ -341,6 +356,7 @@ public class DatabaseEnv {
         }
         currentlyProcessing.clear();
         txn.commit();
+        logger.info("flushed out currently processing to crawl queue");
     }
 
     public synchronized void close() {
