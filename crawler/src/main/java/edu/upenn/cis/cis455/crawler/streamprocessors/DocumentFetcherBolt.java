@@ -114,7 +114,7 @@ public class DocumentFetcherBolt implements IRichBolt {
         logger.info(url + ": storing document in aws");
         String contentType = responseHeaders.get(CONTENT_TYPE_HEADER);
         database.addDocument(url, content, contentType);
-        // awsEnv.putDocument(url, content);
+        awsEnv.putDocument(url, content, executorId);
         CrawlerState.count.incrementAndGet();
 
         logger.debug(getExecutorId() + " emitting content for " + url);

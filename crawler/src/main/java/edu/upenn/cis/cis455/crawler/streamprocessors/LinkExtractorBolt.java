@@ -6,6 +6,8 @@ import java.util.UUID;
 
 import static edu.upenn.cis.cis455.crawler.utils.Constants.*;
 
+import edu.upenn.cis.cis455.storage.AWSFactory;
+import edu.upenn.cis.cis455.storage.AWSInstance;
 import edu.upenn.cis.cis455.crawler.utils.URLInfo;
 import edu.upenn.cis.cis455.storage.DatabaseEnv;
 import edu.upenn.cis.cis455.storage.StorageFactory;
@@ -50,6 +52,7 @@ public class LinkExtractorBolt implements IRichBolt {
      * Interface for database methods.
      */
     DatabaseEnv database;
+    AWSInstance awsEnv;
 
     @Override
     public String getExecutorId() {
@@ -65,6 +68,8 @@ public class LinkExtractorBolt implements IRichBolt {
     public void prepare(Map<String, String> config, TopologyContext context, OutputCollector coll) {
         collector = coll;
         database = StorageFactory.getDatabaseInstance(config.get(DATABASE_DIRECTORY));
+        awsEnv = AWSFactory.getDatabaseInstance();
+
     }
 
     @Override
@@ -96,6 +101,7 @@ public class LinkExtractorBolt implements IRichBolt {
             } catch (MalformedURLException e) {
                 continue;
             }
+            awsEnv.addUrl(url,domain);
             collector.emit(new Values<Object>(domain, linkHref), getExecutorId());
         }
         logger.debug(url + ": parse end, total links emitted=" + links.size());
