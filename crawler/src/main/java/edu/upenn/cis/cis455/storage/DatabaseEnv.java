@@ -73,56 +73,18 @@ public class DatabaseEnv {
     // Document Methods
     ///////////////////////////////////////////////////
 
-    public synchronized int addDocument(String url, String documentContents) {
-        return addDocument(url, documentContents, "");
-    }
-
-    public synchronized int addDocument(String url, String documentContents, String contentType) {
+    public synchronized void addDocument(String url, String documentContents, String contentType) {
 
         Transaction txn = env.beginTransaction(null, null);
-        Document doc = documentByUrl.get(url);
-        if (doc != null) {
-            doc.setContent(documentContents);
-            logger.info("Updating document: " + doc.id);
-        } else {
-            doc = new Document(url, documentContents);
+        if (documentByUrl.contains(url)) {
+            txn.abort();
+            throw new IllegalArgumentException("Document already exists in database.");
         }
-        doc.updateLastFetchedDate();
-        doc.setContentType(contentType);
+        Document doc = new Document(url, documentContents, contentType);
         documentById.put(doc);
         txn.commit();
 
         logger.info("Added content to document: " + doc.id);
-        return doc.id;
-    }
-
-    public synchronized String getDocument(String url) {
-        Document doc = documentByUrl.get(url);
-        return doc.content;
-    }
-
-    public synchronized Document getDocument(int id) {
-        return documentById.get(id);
-    }
-
-    public synchronized String getDocumentType(String url) {
-        Document doc = documentByUrl.get(url);
-        return doc.contentType;
-    }
-
-    public synchronized long getDocumentLastFetch(String url) {
-        if (!containsDocument(url)) {
-            return -1;
-        }
-        Document doc = documentByUrl.get(url);
-        return doc.lastFetchedDate;
-    }
-
-    public synchronized boolean containsDocument(String url) {
-        if (url == null) {
-            return false;
-        }
-        return documentByUrl.contains(url);
     }
 
     ///////////////////////////////////////////////////

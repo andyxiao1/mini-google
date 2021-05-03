@@ -122,8 +122,8 @@ public class AWSInstance {
 
     public int putDocument(Document doc) {
 
-        String url = doc.getUrl();
-        String content = doc.getContent();
+        String url = doc.url;
+        String content = doc.content;
 
         int id = url.hashCode();
         String urlhash = "" + id;
@@ -209,7 +209,7 @@ public class AWSInstance {
     // for testing purposes
     public static void main(String[] args) throws Exception {
         AWSInstance instance = new AWSInstance();
-        System.out.println(instance.putDocument(new Document("test2", "test2")));
+        System.out.println(instance.putDocument(new Document("test2", "test2", "test2")));
         // System.out.println(instance.getDocument(1));
     }
 

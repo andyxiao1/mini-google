@@ -25,25 +25,11 @@ public class Document {
     private Document() {
     } // For bindings
 
-    public Document(String documentUrl, String documentContent) {
+    public Document(String documentUrl, String documentContent, String type) {
         url = documentUrl;
         content = documentContent;
-    }
-
-    public void setContent(String documentContent) {
-        content = documentContent;
-    }
-
-    public String getUrl() {
-        return url;
-    }
-
-    public String getContent() {
-        return content;
-    }
-
-    public void setContentType(String type) {
         contentType = type;
+        updateLastFetchedDate();
     }
 
     public void updateLastFetchedDate() {

@@ -167,9 +167,9 @@ public class CrawlWorker {
                     log.info(e);
                 }
 
-                // Sleep for 10 seconds.
+                // Sleep for 5 seconds.
                 try {
-                    Thread.sleep(10000);
+                    Thread.sleep(5000);
                 } catch (InterruptedException e) {
                     log.error(e);
                 }
