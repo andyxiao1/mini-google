@@ -1,2 +1,5 @@
 .DS_Store
 .vscode
+hiveCommands.txt
+frontend/node_modules
+crawler/db
