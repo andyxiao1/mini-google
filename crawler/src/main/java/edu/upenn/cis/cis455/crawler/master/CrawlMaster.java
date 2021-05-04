@@ -247,7 +247,7 @@ public class CrawlMaster {
         if (crawlStartTime == -1) {
             return "";
         }
-        long totalSeconds = (System.currentTimeMillis() - crawlStartTime) / 1000;
+        long totalSeconds = (System.currentTimeMillis() - crawlStartTime) / 1000 + 1;
         long hours = totalSeconds / 60 / 60;
         long minutes = (totalSeconds % (60 * 60)) / 60;
         long seconds = totalSeconds % 60;

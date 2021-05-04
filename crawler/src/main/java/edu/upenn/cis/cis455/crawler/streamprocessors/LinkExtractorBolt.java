@@ -101,7 +101,8 @@ public class LinkExtractorBolt implements IRichBolt {
             } catch (MalformedURLException e) {
                 continue;
             }
-            awsEnv.addUrl(url,domain);
+            // Note: Comment this line out if we are testing locally.
+            awsEnv.addUrl(url, domain);
             collector.emit(new Values<Object>(domain, linkHref), getExecutorId());
         }
         logger.debug(url + ": parse end, total links emitted=" + links.size());

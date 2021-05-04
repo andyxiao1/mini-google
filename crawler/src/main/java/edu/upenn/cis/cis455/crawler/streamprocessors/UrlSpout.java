@@ -71,15 +71,11 @@ public class UrlSpout implements IRichSpout {
     @Override
     public boolean nextTuple() {
 
-        if (database.isCrawlQueueEmpty() || CrawlerState.isShutdown.get()) {
+        String domain = database.crawlQueueRemoveLeft();
+        if (domain == null || CrawlerState.isShutdown.get()) {
             return true;
         }
 
-        String domain = database.crawlQueueRemoveLeft();
-        if (domain == null) {
-            logger.error("Crawl Queue returning null");
-            return true;
-        }
         boolean shouldFetchRobots = !database.containsRobotsInfo(domain);
 
         // Since we have removed the domain, only 1 thread can fetch robots.txt.
