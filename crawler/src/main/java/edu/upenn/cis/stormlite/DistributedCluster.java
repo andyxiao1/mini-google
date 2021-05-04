@@ -328,7 +328,7 @@ public class DistributedCluster implements Runnable {
 
 	public void awaitTermination() {
 		try {
-			executor.awaitTermination(25, TimeUnit.SECONDS);
+			executor.awaitTermination(60, TimeUnit.SECONDS);
 		} catch (InterruptedException e) {
 			e.printStackTrace();
 		}
