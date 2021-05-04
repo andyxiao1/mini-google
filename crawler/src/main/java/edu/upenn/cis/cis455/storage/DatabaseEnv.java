@@ -339,10 +339,10 @@ public class DatabaseEnv {
         synchronized (StorageLocks.URL_SEEN_CACHE_LOCK) {
             if (!urlStr.equals("noop")) {
                 urlSeenCache.add(urlStr);
+                urlSeenCount++;
             }
 
             if (urlSeenCache.size() < 1000 && urlSeenCount > 50 && !isFlushing) {
-                urlSeenCount++;
                 logger.debug("Added url to url seen cache: " + urlStr);
                 return;
             }
@@ -440,6 +440,7 @@ public class DatabaseEnv {
     }
 
     public synchronized void flushUrlCaches() {
+        isFlushing = true;
         addUrlSeen("noop");
         addUrlToCrawlQueue("noop");
     }
