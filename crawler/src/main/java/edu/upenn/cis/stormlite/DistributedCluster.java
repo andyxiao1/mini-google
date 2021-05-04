@@ -330,7 +330,8 @@ public class DistributedCluster implements Runnable {
 		try {
 			executor.awaitTermination(60, TimeUnit.SECONDS);
 		} catch (InterruptedException e) {
-			e.printStackTrace();
+			log.error("Forced termination");
+			// e.printStackTrace();
 		}
 	}
 }
