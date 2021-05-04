@@ -20,11 +20,12 @@ public final class Constants {
     public static final String DATABASE_DIRECTORY = "DATABASE_DIRECTORY";
     public static final String MAX_DOCUMENT_SIZE = "MAX_DOCUMENT_SIZE";
     public static final String WORKER_INDEX = "workerIndex";
-    public static final String CRAWL_COUNT = "CRAWL_COUNT";
+    public static final String THREAD_COUNT = "THREAD_COUNT";
     public static final String WORKER_LIST = "workerList";
     public static final String START_URL = "START_URL";
 
     public static final int MEGABYTE_BYTES = 1000000; // 1e6 bytes = 1 mb
+
     public static final int MAX_ROBOTS_FILE_SIZE = 2 * MEGABYTE_BYTES;
 
     public static final String HEAD_REQUEST = "HEAD";

@@ -12,8 +12,9 @@ import org.apache.logging.log4j.Logger;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import edu.upenn.cis.cis455.crawler.CrawlerQueue;
 import edu.upenn.cis.cis455.crawler.utils.CrawlerState;
+import edu.upenn.cis.cis455.crawler.utils.HTTP;
+import edu.upenn.cis.cis455.storage.AWSFactory;
 import edu.upenn.cis.cis455.storage.DatabaseEnv;
 import edu.upenn.cis.cis455.storage.StorageFactory;
 import edu.upenn.cis.stormlite.Config;
@@ -28,35 +29,36 @@ public class CrawlWorker {
 
     String masterAddr;
     String storageDir;
+    int port;
 
     DistributedCluster cluster;
     ObjectMapper om;
     DatabaseEnv database;
-    CrawlerQueue queue;
     TopologyContext context;
+    Thread workerStatusThread;
 
     AtomicBoolean isRunning = new AtomicBoolean(true);
 
-    public CrawlWorker(int port, String masterAddress, String storageDirectory) {
-        log.info("Crawl worker node startup, on port" + port);
+    public CrawlWorker(int myPort, String masterAddress, String storageDirectory) {
+        log.info("Crawl worker node startup, on port " + myPort);
 
-        port(port);
+        port = myPort;
         masterAddr = masterAddress;
         storageDir = storageDirectory;
         cluster = new DistributedCluster();
         om = new ObjectMapper();
         om.enableDefaultTyping(ObjectMapper.DefaultTyping.NON_FINAL);
 
-        database = (DatabaseEnv) StorageFactory.getDatabaseInstance(storageDir);
-        queue = CrawlerQueue.getSingleton();
-        System.out.println(database);
-        database.resetRun();
+        database = StorageFactory.getDatabaseInstance(storageDir);
+        // database.resetRun();
 
+        port(port);
         defineInitCrawlRoute();
         defineStartCrawlRoute();
         definePushDataRoute();
         defineShutdownRoute();
         setupShutdownThread();
+        setupWorkerStatusThread();
     }
 
     private void defineInitCrawlRoute() {
@@ -66,13 +68,10 @@ public class CrawlWorker {
                 workerJob = om.readValue(request.body(), WorkerJob.class);
                 Config config = workerJob.getConfig();
                 config.put(DATABASE_DIRECTORY, storageDir);
-
-                String startUrl = config.get(START_URL);
-                database.addUrl(startUrl);
-                queue.addUrl(startUrl);
+                int crawlThreads = Integer.parseInt(config.get(THREAD_COUNT));
 
                 log.info("Processing init crawl request on machine " + config.get(WORKER_INDEX));
-                context = cluster.submitTopology("Crawler", config, workerJob.getTopology());
+                context = cluster.submitTopology("Crawler", config, workerJob.getTopology(), crawlThreads);
 
                 return "Job launched";
             } catch (ClassNotFoundException | IOException e) {
@@ -110,17 +109,6 @@ public class CrawlWorker {
                 }
 
                 router.executeLocally(tuple, context, tuple.getSourceExecutor());
-
-                // TODO: we don't need this bc we don't have any notion of EOS anymore??
-                // if (!tuple.isEndOfStream()) {
-                // // Instrumentation for tracking progress
-                // context.incSendOutputs(router.getKey(tuple.getValues()));
-
-                // router.executeLocally(tuple, context, tuple.getSourceExecutor());
-                // } else {
-                // router.executeEndOfStreamLocally(context, tuple.getSourceExecutor());
-                // }
-
                 return "OK";
             } catch (IOException e) {
                 e.printStackTrace();
@@ -156,17 +144,63 @@ public class CrawlWorker {
         shutdownThread.start();
     }
 
+    private void setupWorkerStatusThread() {
+        // Background thread to send /workerstatus updates.
+        Runnable workerStatusRunnable = () -> {
+            String baseUrl = "";
+            if (masterAddr.startsWith("localhost:")) {
+                baseUrl = "127.0.0.1:" + masterAddr.substring(10);
+            } else {
+                baseUrl = masterAddr;
+            }
+            baseUrl = "http://" + baseUrl + "/workerstatus";
+
+            while (isRunning.get()) {
+                log.debug("worker status thread running");
+
+                // Send workerstatus to master server.
+                try {
+                    String queryString = "?port=" + port + "&count=" + CrawlerState.count.get();
+                    log.info("Sending worker status to master server with parameters: " + queryString);
+
+                    HTTP.sendData(baseUrl + queryString, GET_REQUEST, "");
+                } catch (IOException e) {
+                    log.info(e);
+                }
+
+                // Sleep for 5 seconds.
+                try {
+                    Thread.sleep(5000);
+                } catch (InterruptedException e) {
+                    log.error(e);
+                }
+            }
+        };
+        workerStatusThread = new Thread(workerStatusRunnable);
+        workerStatusThread.start();
+    }
+
     private void shutdown() {
-        System.out.println(database);
-        System.out.println("Crawl Count: " + CrawlerState.count);
-        CrawlerState.isShutdown = true;
+        CrawlerState.isShutdown.set(true);
         cluster.killTopology("");
         cluster.shutdown();
         stop();
+
+        System.out.println(database);
+        System.out.println("Crawl Count: " + CrawlerState.count.get());
+        AWSFactory.getDatabaseInstance().close();
+        database.close();
+
+        try {
+            workerStatusThread.join();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        System.exit(0);
     }
 
     public static void main(String[] args) {
-        org.apache.logging.log4j.core.config.Configurator.setLevel("edu.upenn", Level.ALL);
+        org.apache.logging.log4j.core.config.Configurator.setLevel("edu.upenn", Level.INFO);
 
         // Process arguments.
         if (args.length != 3) {

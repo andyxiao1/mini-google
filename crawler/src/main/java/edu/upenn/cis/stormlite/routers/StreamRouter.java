@@ -135,13 +135,14 @@ public abstract class StreamRouter implements OutputFieldsDeclarer {
 
         if (bolts != null && !bolts.isEmpty()) {
             for (IRichBolt bolt : bolts) {
-                log.debug("Task queued: " + bolt.getClass().getName() + " (" + bolt.getExecutorId() + "): "
-                        + tuple.toString());
-                context.addStreamTask(new BoltTask(bolt, new Tuple(schema, tuple, sourceExecutor)));
+                log.debug("Task queued: " + bolt.getClass().getName() + " (" + bolt.getExecutorId() + "): ");
+                context.addStreamTask(bolt.getClass().getName(),
+                        new BoltTask(bolt, new Tuple(schema, tuple, sourceExecutor)));
             }
 
-        } else
+        } else {
             throw new RuntimeException("Unable to find a bolt for the tuple");
+        }
     }
 
     /**
@@ -161,9 +162,10 @@ public abstract class StreamRouter implements OutputFieldsDeclarer {
                 continue;
 
             log.debug("Task queued from other worker: " + bolt.getClass().getName() + " (" + bolt.getExecutorId()
-                    + "): " + tuple.toString());
+                    + "): ");
             if (bolt != null)
-                context.addStreamTask(new BoltTask(bolt, new Tuple(schema, tuple, sourceExecutor)));
+                context.addStreamTask(bolt.getClass().getName(),
+                        new BoltTask(bolt, new Tuple(schema, tuple, sourceExecutor)));
             else
                 throw new RuntimeException("Unable to find a bolt for the tuple");
         }
@@ -213,7 +215,7 @@ public abstract class StreamRouter implements OutputFieldsDeclarer {
     public synchronized void executeEndOfStream(TopologyContext context, String sourceExecutor) {
         for (IRichBolt bolt : getBolts()) {
             log.debug("Task queued: " + bolt.getClass().getName() + " (" + bolt.getExecutorId() + "): (EOS)");
-            context.addStreamTask(new BoltTask(bolt, Tuple.getEndOfStream(sourceExecutor)));
+            context.addStreamTask(bolt.getClass().getName(), new BoltTask(bolt, Tuple.getEndOfStream(sourceExecutor)));
         }
     }
 
@@ -230,7 +232,8 @@ public abstract class StreamRouter implements OutputFieldsDeclarer {
             if (!isRemoteBolt(bolt)) {
                 log.debug("Task queued from other worker: " + bolt.getClass().getName() + " (" + bolt.getExecutorId()
                         + "): (EOS)");
-                context.addStreamTask(new BoltTask(bolt, Tuple.getEndOfStream(sourceExecutor)));
+                context.addStreamTask(bolt.getClass().getName(),
+                        new BoltTask(bolt, Tuple.getEndOfStream(sourceExecutor)));
             }
     }
 

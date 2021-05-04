@@ -1,6 +1,9 @@
 package edu.upenn.cis.cis455.crawler.utils;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+
 public class CrawlerState {
-    public static int count = 0;
-    public static boolean isShutdown = false;
+    public static AtomicInteger count = new AtomicInteger(0);
+    public static AtomicBoolean isShutdown = new AtomicBoolean(false);
 }

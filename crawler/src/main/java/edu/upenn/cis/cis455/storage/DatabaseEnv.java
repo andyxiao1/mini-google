@@ -1,8 +1,11 @@
 package edu.upenn.cis.cis455.storage;
 
 import java.io.File;
+import java.net.MalformedURLException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.HashSet;
+import java.util.Set;
 
 import com.sleepycat.je.DatabaseException;
 import com.sleepycat.je.Environment;
@@ -18,17 +21,24 @@ import com.sleepycat.persist.StoreConfig;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-public class DatabaseEnv implements StorageInterface {
+import edu.upenn.cis.cis455.crawler.utils.URLInfo;
+
+public class DatabaseEnv {
 
     static final Logger logger = LogManager.getLogger(DatabaseEnv.class);
 
     Environment env;
     EntityStore store;
-    PrimaryIndex<Integer, Document> documentById;
-    SecondaryIndex<String, Integer, Document> documentByUrl;
+    PrimaryIndex<Long, Document> documentById;
+    SecondaryIndex<String, Long, Document> documentByUrl;
     PrimaryIndex<String, ContentSeen> contentSeenByHash;
     PrimaryIndex<String, UrlSeen> urlSeenByUrl;
     PrimaryIndex<String, RobotsInfo> robotsInfoByDomain;
+
+    PrimaryIndex<String, DomainQueue> domainQueueByDomain;
+    PrimaryIndex<Long, CrawlQueue> crawlQueueById;
+    SecondaryIndex<String, Long, CrawlQueue> crawlQueueByDomain;
+    Set<String> currentlyProcessing;
 
     public DatabaseEnv(String directory) {
         logger.info("Initializing database environment for " + directory);
@@ -58,86 +68,200 @@ public class DatabaseEnv implements StorageInterface {
             docSequenceConfig.setCacheSize(1);
             store.setSequenceConfig("docId", docSequenceConfig);
 
-            documentById = store.getPrimaryIndex(Integer.class, Document.class);
+            documentById = store.getPrimaryIndex(Long.class, Document.class);
             documentByUrl = store.getSecondaryIndex(documentById, String.class, "url");
             contentSeenByHash = store.getPrimaryIndex(String.class, ContentSeen.class);
             urlSeenByUrl = store.getPrimaryIndex(String.class, UrlSeen.class);
             robotsInfoByDomain = store.getPrimaryIndex(String.class, RobotsInfo.class);
+            domainQueueByDomain = store.getPrimaryIndex(String.class, DomainQueue.class);
+            crawlQueueById = store.getPrimaryIndex(Long.class, CrawlQueue.class);
+            crawlQueueByDomain = store.getSecondaryIndex(crawlQueueById, String.class, "domain");
+            currentlyProcessing = new HashSet<String>();
 
         } catch (DatabaseException dbe) {
             logger.error("Error opening environment and store");
             logger.error(dbe);
         }
+
+        initializeCrawlQueue();
+    }
+
+    ///////////////////////////////////////////////////
+    // Crawler Methods
+    ///////////////////////////////////////////////////
+
+    /**
+     * Removes from CQ, adds domain to `currentlyProcessing` set. Returns null if CQ
+     * is empty.
+     */
+    public synchronized String crawlQueueRemoveLeft() {
+
+        Transaction txn = env.beginTransaction(null, null);
+        if (isCrawlQueueEmpty()) {
+            txn.abort();
+            return null;
+        }
+
+        CrawlQueue queue = crawlQueueById.get(CrawlQueue.frontId);
+        crawlQueueById.delete(CrawlQueue.frontId);
+        queue.removeFromFront(); // Id now out of valid range.
+
+        String domain = queue.domain;
+
+        if (currentlyProcessing.contains(domain)) {
+            txn.abort();
+            throw new IllegalStateException("Removing domain already in processing set");
+        }
+
+        currentlyProcessing.add(domain);
+        txn.commit();
+
+        logger.debug("Removed from crawl queue: " + queue.domain);
+        return queue.domain;
+    }
+
+    /**
+     * Remove domain from processing if necessary. Adds domain to head of CQ if it
+     * is non-empty.
+     */
+    public synchronized void crawlQueueAddLeft(String domain) {
+        crawlQueueAdd(domain, true);
+    }
+
+    /**
+     * Remove domain from processing if necessary. Adds domain to end of CQ if it is
+     * non-empty.
+     */
+    public synchronized void crawlQueueAddRight(String domain) {
+        crawlQueueAdd(domain, false);
+    }
+
+    private synchronized void crawlQueueAdd(String domain, boolean addToFront) {
+        Transaction txn = env.beginTransaction(null, null);
+
+        if (!currentlyProcessing.contains(domain)) {
+            txn.abort();
+            logger.error("Trying to add domain when it isn't in currently processing");
+        }
+
+        currentlyProcessing.remove(domain);
+        if (crawlQueueByDomain.contains(domain)) {
+            txn.abort();
+            throw new IllegalStateException("Trying to add domain already in queue");
+        }
+
+        if (!domainQueueByDomain.get(domain).urls.isEmpty()) {
+            CrawlQueue queue = new CrawlQueue(domain, addToFront);
+            crawlQueueById.put(queue);
+        }
+
+        txn.commit();
+        logger.debug("Added to crawl queue: " + domain);
+    }
+
+    public synchronized boolean isCrawlQueueEmpty() {
+        return CrawlQueue.isEmpty();
+    }
+
+    /**
+     * Add a new url to the Crawler Queue. Adds to DQ, and creates CQ instance if
+     * the domain doesn't exist in CQ or `currentlyProcessing`.
+     */
+    public synchronized void addUrl(String url) {
+
+        Transaction txn = env.beginTransaction(null, null);
+
+        String domain = null;
+        try {
+            domain = (new URLInfo(url)).getBaseUrl();
+        } catch (MalformedURLException e) {
+            txn.abort();
+            logger.info("Trying to add malformed url: " + url);
+            return;
+        }
+
+        // Add to domain queue.
+        DomainQueue domainQueue = domainQueueByDomain.get(domain);
+        if (domainQueue == null) {
+            domainQueue = new DomainQueue(domain);
+        }
+        domainQueue.urls.add(url);
+        domainQueueByDomain.put(domainQueue);
+
+        // Add to crawl queue if not in it already and not in `currentlyProcessing`.
+        if (!crawlQueueByDomain.contains(domain) && !currentlyProcessing.contains(domain)) {
+            CrawlQueue crawlQueue = new CrawlQueue(domain, false);
+            crawlQueueById.put(crawlQueue);
+        }
+
+        txn.commit();
+        logger.debug("Added url to crawler queue: " + url);
+    }
+
+    /**
+     * Returns the next url to parse from the specified Domain Queue.
+     */
+    public synchronized String removeUrl(String domain) {
+
+        Transaction txn = env.beginTransaction(null, null);
+
+        if (!domainQueueByDomain.contains(domain)) {
+            txn.abort();
+            throw new IllegalStateException("Domain not in Domain Queue");
+        }
+
+        DomainQueue domainQueue = domainQueueByDomain.get(domain);
+
+        if (domainQueue.urls.isEmpty()) {
+            txn.abort();
+            throw new IllegalStateException("Domain Queue empty");
+        }
+
+        String nextUrl = domainQueue.urls.remove();
+        domainQueueByDomain.put(domainQueue);
+        txn.commit();
+
+        logger.debug("Removed url from domain queue: " + nextUrl);
+        return nextUrl;
+    }
+
+    public synchronized void initializeCrawlQueue() {
+        EntityCursor<CrawlQueue> queues = crawlQueueById.entities();
+
+        // Only reset the front and back ids if the queue isn't empty.
+        if (queues.next() == null) {
+            queues.close();
+            return;
+        }
+
+        CrawlQueue.frontId = queues.next().id;
+        CrawlQueue.endId = queues.last().id;
+        queues.close();
     }
 
     ///////////////////////////////////////////////////
     // Document Methods
     ///////////////////////////////////////////////////
 
-    @Override
-    public int getCorpusSize() {
-        return (int) documentById.count();
-    }
-
-    @Override
-    public int addDocument(String url, String documentContents) {
-        return addDocument(url, documentContents, "");
-    }
-
-    public int addDocument(String url, String documentContents, String contentType) {
+    public synchronized void addDocument(String url, String documentContents, String contentType) {
 
         Transaction txn = env.beginTransaction(null, null);
-        Document doc = documentByUrl.get(url);
-        if (doc != null) {
-            doc.setContent(documentContents);
-            logger.info("Updating document: " + doc.id);
-        } else {
-            doc = new Document(url, documentContents);
+        if (documentByUrl.contains(url)) {
+            txn.abort();
+            throw new IllegalArgumentException("Document already exists in database.");
         }
-        doc.updateLastFetchedDate();
-        doc.setContentType(contentType);
+        Document doc = new Document(url, documentContents, contentType);
         documentById.put(doc);
         txn.commit();
 
         logger.info("Added content to document: " + doc.id);
-        return doc.id;
-    }
-
-    @Override
-    public String getDocument(String url) {
-        Document doc = documentByUrl.get(url);
-        return doc.content;
-    }
-
-    public Document getDocument(int id) {
-        return documentById.get(id);
-    }
-
-    public String getDocumentType(String url) {
-        Document doc = documentByUrl.get(url);
-        return doc.contentType;
-    }
-
-    public long getDocumentLastFetch(String url) {
-        if (!containsDocument(url)) {
-            return -1;
-        }
-        Document doc = documentByUrl.get(url);
-        return doc.lastFetchedDate;
-    }
-
-    public boolean containsDocument(String url) {
-        if (url == null) {
-            return false;
-        }
-        return documentByUrl.contains(url);
     }
 
     ///////////////////////////////////////////////////
     // Content Seen Methods
     ///////////////////////////////////////////////////
 
-    public void addContentSeen(String hash) {
+    public synchronized void addContentSeen(String hash) {
 
         Transaction txn = env.beginTransaction(null, null);
         if (containsHashContent(hash)) {
@@ -149,10 +273,10 @@ public class DatabaseEnv implements StorageInterface {
         contentSeenByHash.put(content);
         txn.commit();
 
-        logger.info("Added document hash to content seen");
+        logger.debug("Added document hash to content seen");
     }
 
-    public boolean containsHashContent(String hash) {
+    public synchronized boolean containsHashContent(String hash) {
         return contentSeenByHash.contains(hash);
     }
 
@@ -160,7 +284,7 @@ public class DatabaseEnv implements StorageInterface {
     // Url Seen Methods
     ///////////////////////////////////////////////////
 
-    public void addUrl(String url) {
+    public synchronized void addUrlSeen(String url) {
 
         Transaction txn = env.beginTransaction(null, null);
         if (containsUrl(url)) {
@@ -172,10 +296,10 @@ public class DatabaseEnv implements StorageInterface {
         urlSeenByUrl.put(urlSeen);
         txn.commit();
 
-        logger.info("Added url to url seen: " + url);
+        logger.debug("Added url to url seen: " + url);
     }
 
-    public boolean containsUrl(String url) {
+    public synchronized boolean containsUrl(String url) {
         return urlSeenByUrl.contains(url);
     }
 
@@ -183,7 +307,7 @@ public class DatabaseEnv implements StorageInterface {
     // Robots Methods
     ///////////////////////////////////////////////////
 
-    public RobotsInfo addRobotsInfo(String baseUrl, String robotsFile) {
+    public synchronized RobotsInfo addRobotsInfo(String baseUrl, String robotsFile) {
 
         Transaction txn = env.beginTransaction(null, null);
         if (containsRobotsInfo(baseUrl)) {
@@ -195,49 +319,49 @@ public class DatabaseEnv implements StorageInterface {
         robotsInfoByDomain.put(robots);
         txn.commit();
 
-        logger.info("Added robots.txt contents to robots db: " + baseUrl);
+        logger.debug("Added robots.txt contents to robots db: " + baseUrl);
         return robots;
     }
 
-    public RobotsInfo getRobotsInfo(String baseUrl) {
+    public synchronized RobotsInfo getRobotsInfo(String baseUrl) {
         return robotsInfoByDomain.get(baseUrl);
     }
 
-    public boolean containsRobotsInfo(String baseUrl) {
+    public synchronized boolean containsRobotsInfo(String baseUrl) {
         return robotsInfoByDomain.contains(baseUrl);
     }
 
-    public void accessDomain(RobotsInfo robots) {
+    public synchronized void accessDomain(RobotsInfo robots) {
 
         Transaction txn = env.beginTransaction(null, null);
         robots.access();
         robotsInfoByDomain.put(robots);
         txn.commit();
 
-        logger.info("Updated last access time in robots db for: " + robots.domain + " to " + robots.lastAccessedTime);
-    }
-
-    ///////////////////////////////////////////////////
-    // Çrawler Methods
-    ///////////////////////////////////////////////////
-
-    public void resetRun() {
-        store.truncateClass(ContentSeen.class);
-        contentSeenByHash = store.getPrimaryIndex(String.class, ContentSeen.class);
-
-        store.truncateClass(UrlSeen.class);
-        urlSeenByUrl = store.getPrimaryIndex(String.class, UrlSeen.class);
-
-        store.truncateClass(RobotsInfo.class);
-        robotsInfoByDomain = store.getPrimaryIndex(String.class, RobotsInfo.class);
+        logger.debug("Updated last access time in robots db for: " + robots.domain + " to " + robots.lastAccessedTime);
     }
 
     ///////////////////////////////////////////////////
     // Database Methods
     ///////////////////////////////////////////////////
 
-    @Override
-    public void close() {
+    public synchronized void flushCurrentlyProcessing() {
+        Transaction txn = env.beginTransaction(null, null);
+        for (String domain : currentlyProcessing) {
+
+            if (!domainQueueByDomain.get(domain).urls.isEmpty()) {
+                CrawlQueue queue = new CrawlQueue(domain, false);
+                crawlQueueById.put(queue);
+            }
+
+        }
+        currentlyProcessing.clear();
+        txn.commit();
+        logger.info("flushed out currently processing to crawl queue");
+    }
+
+    public synchronized void close() {
+        flushCurrentlyProcessing();
         if (store != null) {
             try {
                 store.close();
@@ -256,55 +380,78 @@ public class DatabaseEnv implements StorageInterface {
         }
     }
 
-    public String toString() {
+    public synchronized String toString() {
 
         // Print documents
-        EntityCursor<Document> documents = documentById.entities();
-        int count = 0;
+        // EntityCursor<Document> documents = documentById.entities();
+        // int count = 0;
         String res = "=======================================\n";
 
-        for (Document document : documents) {
-            res += document;
-            count++;
-        }
-        documents.close();
-        res += "Number of documents: " + count + "\n";
+        // for (Document document : documents) {
+        // res += document;
+        // count++;
+        // if (count >= 10) {
+        // break;
+        // }
+        // }
+        // documents.close();
+        res += "Number of documents: " + documentById.count() + "\n";
         res += "=======================================\n";
 
-        // Print content seen
-        EntityCursor<ContentSeen> contentSeen = contentSeenByHash.entities();
-        count = 0;
+        // // Print content seen
+        // EntityCursor<ContentSeen> contentSeen = contentSeenByHash.entities();
+        // count = 0;
 
-        for (ContentSeen content : contentSeen) {
-            res += content;
-            count++;
-        }
-        contentSeen.close();
-        res += "Number of hash contents seen: " + count + "\n";
+        // for (ContentSeen content : contentSeen) {
+        // res += content;
+        // count++;
+        // }
+        // contentSeen.close();
+        res += "Number of hash contents seen: " + contentSeenByHash.count() + "\n";
         res += "=======================================\n";
 
         // Print urls seen
-        EntityCursor<UrlSeen> urls = urlSeenByUrl.entities();
-        count = 0;
+        // EntityCursor<UrlSeen> urls = urlSeenByUrl.entities();
+        // count = 0;
 
-        for (UrlSeen url : urls) {
-            res += url;
-            count++;
-        }
-        urls.close();
-        res += "Number of urls seen: " + count + "\n";
+        // for (UrlSeen url : urls) {
+        // res += url;
+        // count++;
+        // if (count >= 10) {
+        // break;
+        // }
+        // }
+        // urls.close();
+        res += "Number of urls seen: " + urlSeenByUrl.count() + "\n";
         res += "=======================================\n";
 
-        // Print robots
-        EntityCursor<RobotsInfo> robots = robotsInfoByDomain.entities();
-        count = 0;
+        // // Print robots
+        // EntityCursor<RobotsInfo> robots = robotsInfoByDomain.entities();
+        // count = 0;
 
-        for (RobotsInfo robot : robots) {
-            res += robot;
-            count++;
+        // for (RobotsInfo robot : robots) {
+        // res += robot;
+        // count++;
+        // }
+        // robots.close();
+        res += "Number of robots seen: " + robotsInfoByDomain.count() + "\n";
+        res += "=======================================\n";
+
+        // Print Domain Queue
+        EntityCursor<DomainQueue> domains = domainQueueByDomain.entities();
+        int count = 0;
+        for (DomainQueue domainQueue : domains) {
+            count += domainQueue.size();
         }
-        robots.close();
-        res += "Number of robots seen: " + count + "\n";
+        domains.close();
+        res += "Number of total domains: " + domainQueueByDomain.count() + "\n";
+        res += "Number of urls in queue: " + count + "\n";
+        res += "=======================================\n";
+
+        // Print Crawl Queue
+        res += "CrawlQueue[frontId=" + CrawlQueue.frontId + ",endId=" + CrawlQueue.endId + "]\n";
+        res += "Number of domains in queue: " + crawlQueueById.count() + "\n";
+        res += "Number of domains in processing: " + currentlyProcessing.size() + "\n";
         res += "=======================================\n";
 
         return res;

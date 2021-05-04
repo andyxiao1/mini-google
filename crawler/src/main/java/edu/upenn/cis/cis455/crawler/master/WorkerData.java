@@ -1,4 +1,4 @@
-package edu.upenn.cis.cis455.mapreduce.master;
+package edu.upenn.cis.cis455.crawler.master;
 
 import java.time.Instant;
 
@@ -11,11 +11,7 @@ public class WorkerData {
     long lastActive;
     String ip;
     String port;
-    String status;
-    String job;
-    String keysRead;
-    String keysWritten;
-    String results;
+    int count;
 
     public WorkerData(Request request) {
         ip = request.ip();
@@ -27,12 +23,7 @@ public class WorkerData {
         if (!request.ip().equals(ip) || !request.queryParams("port").equals(port)) {
             throw new IllegalArgumentException("Trying to update wrong WorkerData.");
         }
-        status = request.queryParams("status");
-        job = request.queryParams("job");
-        keysRead = request.queryParams("keysRead");
-        keysWritten = request.queryParams("keysWritten");
-        results = request.queryParams("results");
-
+        count = Integer.parseInt(request.queryParams("count"));
         lastActive = Instant.now().toEpochMilli();
     }
 
@@ -46,7 +37,6 @@ public class WorkerData {
         // Example: port=8002, status=IDLE, job=Foo, keysRead=2, keysWritten=2,
         // results=[(a, 1),(b,1)]
 
-        return "port=" + port + ", status=" + status + ", job=" + job + ", keysRead=" + keysRead + ", keysWritten="
-                + keysWritten + ", results=" + results;
+        return "ip=" + ip + ", port=" + port + ", count=" + count;
     }
 }

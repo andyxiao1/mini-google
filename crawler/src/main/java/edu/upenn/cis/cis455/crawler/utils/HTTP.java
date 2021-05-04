@@ -10,6 +10,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Map;
 
@@ -20,11 +21,18 @@ public class HTTP {
     public static String makeRequest(String urlStr, String requestMethod, int maxDocumentSize,
             Map<String, String> responseHeaders) {
 
+        logger.debug("Making request at " + new Timestamp(System.currentTimeMillis()));
+
         HttpURLConnection connection = null;
         InputStream responseStream = null;
-        URLInfo urlInfo = new URLInfo(urlStr);
+
+        if (urlStr == null || urlStr.equals("")) {
+            logger.error("url String is empty");
+            return null;
+        }
 
         try {
+            URLInfo urlInfo = new URLInfo(urlStr);
             URL url = new URL(urlInfo.getProtocol(), urlInfo.getHostName(), urlInfo.getPortNo(), urlInfo.getFilePath());
 
             // Should also work for `HttpsURLConnection` connections because it is a
@@ -33,6 +41,9 @@ public class HTTP {
             connection = (HttpURLConnection) url.openConnection();
             connection.setRequestProperty("User-Agent", "cis455crawler");
             connection.setRequestMethod(requestMethod);
+            connection.setConnectTimeout(1200);
+            connection.setReadTimeout(1200);
+            // HttpURLConnection.setFollowRedirects(false);
             responseStream = connection.getInputStream();
 
             byte[] response = new byte[maxDocumentSize];
@@ -47,6 +58,7 @@ public class HTTP {
             // Get only the headers we care about for our purposes.
             if (responseHeaders != null) {
                 String contentLength = connection.getHeaderField("Content-Length");
+
                 if (contentLength != null) {
                     responseHeaders.put("Content-Length", contentLength.trim());
                 }
@@ -68,23 +80,26 @@ public class HTTP {
             if (rlen > -1) {
                 response = Arrays.copyOf(response, rlen);
             }
-            return new String(response, "UTF-8");
+            return (new String(response, "UTF-8")).trim();
 
+        } catch (java.net.SocketTimeoutException e) {
+            logger.error(urlStr + ": Timed Out at " + new Timestamp(System.currentTimeMillis()));
+            logger.debug(e);
         } catch (MalformedURLException e) {
-            logger.debug("Malformed URL: " + urlInfo);
+            logger.debug("Malformed URL: " + urlStr);
             logger.debug(e);
         } catch (UnsupportedEncodingException e) {
             logger.debug("Error converting body byte array to string.");
             logger.debug(e);
         } catch (IOException e) {
-            logger.debug("Error fetching document at url: " + urlInfo);
-            logger.debug(e);
+            logger.error("Error fetching document at url: " + urlStr);
+            logger.error(e);
         } finally {
             if (responseStream != null) {
                 try {
                     responseStream.close();
                 } catch (IOException e) {
-                    logger.debug("Error closing stream at url: " + urlInfo);
+                    logger.debug("Error closing stream at url: " + urlStr);
                     logger.debug(e);
                 }
             }

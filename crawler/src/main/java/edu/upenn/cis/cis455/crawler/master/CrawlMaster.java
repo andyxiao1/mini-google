@@ -6,7 +6,9 @@ import static edu.upenn.cis.cis455.crawler.utils.Constants.*;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -16,12 +18,15 @@ import edu.upenn.cis.cis455.crawler.streamprocessors.LinkExtractorBolt;
 import edu.upenn.cis.cis455.crawler.streamprocessors.LinkFilterBolt;
 import edu.upenn.cis.cis455.crawler.streamprocessors.UrlSpout;
 import edu.upenn.cis.cis455.crawler.utils.HTTP;
+import edu.upenn.cis.cis455.crawler.utils.URLInfo;
 import edu.upenn.cis.stormlite.Config;
 import edu.upenn.cis.stormlite.Topology;
 import edu.upenn.cis.stormlite.TopologyBuilder;
 import edu.upenn.cis.stormlite.distributed.WorkerHelper;
 import edu.upenn.cis.stormlite.distributed.WorkerJob;
 import edu.upenn.cis.stormlite.tuple.Fields;
+import edu.upenn.cis.stormlite.tuple.Tuple;
+import edu.upenn.cis.stormlite.tuple.Values;
 
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
@@ -30,70 +35,65 @@ import org.apache.logging.log4j.Logger;
 public class CrawlMaster {
     static Logger log = LogManager.getLogger(CrawlMaster.class);
 
-    String startUrl;
     Integer maxDocSize;
-    Integer maxCrawlCount;
+    Integer crawlThreads;
+    List<String> seedUrls;
 
     List<String> workers = new ArrayList<String>();
-    // Map<String, WorkerData> workerLookup = new HashMap<String,
-    // WorkerData>();
+    Map<String, WorkerData> workerLookup = new HashMap<String, WorkerData>();
     AtomicBoolean isRunning = new AtomicBoolean(true);
+    long crawlStartTime = -1;
+    long crawlTotal = 0;
 
-    public CrawlMaster(int port, String url, Integer maxSize, Integer count) {
+    public CrawlMaster(int port, String seedUrlFile, Integer maxSize, Integer threadCount) {
         log.info("Crawl master node startup, on port " + port);
 
         port(port);
-        startUrl = url;
         maxDocSize = maxSize;
-        maxCrawlCount = count;
+        crawlThreads = threadCount;
+        seedUrls = UrlReader.readSeedUrls(seedUrlFile);
 
+        defineHomeRoute();
         defineStartCrawlRoute();
+        defineWorkerStatusRoute();
         defineShutdownRoute();
         setupShutdownThread();
-        // TODO: worker status route - also connects + maintains worker list
+    }
+
+    private void defineHomeRoute() {
+        get("/", (request, response) -> {
+            response.type("text/html");
+
+            return ("<html><head><title>Master</title></head>\n" + "<body><h2>Worker Status Info</h2><div>"
+                    + getWorkerStatuses() + "</div><br>"
+                    + "<form method=\"GET\" action=\"/startcrawl\">\r\n<button type=\"submit\">Start Crawl</button>\r\n</form>"
+                    + "<form method=\"GET\" action=\"/shutdown\">\r\n<button type=\"submit\">Shutdown</button>\r\n</form>"
+                    + getTimeStatus() + "</body></html>");
+        });
     }
 
     private void defineStartCrawlRoute() {
         get("/startcrawl", (request, response) -> {
             log.info("Received crawl start command");
+            crawlStartTime = System.currentTimeMillis();
 
             // Setup StormLite topology.
             Config config = new Config();
             config.put(MAX_DOCUMENT_SIZE, maxDocSize.toString());
-            config.put(CRAWL_COUNT, maxCrawlCount.toString());
-            config.put(WORKER_LIST, "[127.0.0.1:8001,127.0.0.1:8002]"); // TODO: hardcoded
-            // config.put(WORKER_LIST, "[127.0.0.1:8001]"); // TODO: hardcoded
-
-            UrlSpout urlSpout = new UrlSpout();
-            DocumentFetcherBolt docFetcherBolt = new DocumentFetcherBolt();
-            LinkExtractorBolt linkExtractorBolt = new LinkExtractorBolt();
-            LinkFilterBolt linkFilterBolt = new LinkFilterBolt();
-            TopologyBuilder builder = new TopologyBuilder();
-
-            builder.setSpout(URL_SPOUT, urlSpout, 3);
-            builder.setBolt(DOC_FETCHER_BOLT, docFetcherBolt, 3).fieldsGrouping(URL_SPOUT, new Fields("url"));
-            builder.setBolt(LINK_EXTRACTOR_BOLT, linkExtractorBolt, 3).fieldsGrouping(DOC_FETCHER_BOLT,
-                    new Fields("url"));
-            builder.setBolt(LINK_FILTER_BOLT, linkFilterBolt, 3).fieldsGrouping(LINK_EXTRACTOR_BOLT, new Fields("url"));
-
-            Topology topo = builder.createTopology();
-            WorkerJob job = new WorkerJob(topo, config);
+            config.put(THREAD_COUNT, crawlThreads.toString());
+            config.put(WORKER_LIST, getWorkerList());
+            WorkerJob job = new WorkerJob(setupTopology(), config);
 
             // Send job to workers.
             ObjectMapper mapper = new ObjectMapper();
             mapper.enableDefaultTyping(ObjectMapper.DefaultTyping.NON_FINAL);
             try {
-                String[] workers = WorkerHelper.getWorkers(config);
+                String[] workerAddrs = WorkerHelper.getWorkers(config);
 
-                for (int i = 0; i < workers.length; i++) {
-                    String dest = workers[i];
+                // Initialize all workers by sending StormLite topology.
+                for (int i = 0; i < workerAddrs.length; i++) {
+                    String dest = workerAddrs[i];
                     config.put(WORKER_INDEX, String.valueOf(i));
-                    // TODO: hardcoded
-                    if (i == 0) {
-                        config.put(START_URL, startUrl); // TODO: hardcoded, make into list
-                    } else {
-                        config.put(START_URL, "https://en.wikipedia.org/wiki/Patience_sorting");
-                    }
 
                     String url = dest + "/" + "initcrawl";
                     String body = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(job);
@@ -102,10 +102,27 @@ public class CrawlMaster {
                     }
                 }
 
-                for (String dest : workers) {
+                // Start all crawl workers.
+                for (String dest : workerAddrs) {
                     String url = dest + "/" + "startcrawl";
                     if (HTTP.sendData(url, POST_REQUEST, "") != HttpURLConnection.HTTP_OK) {
                         throw new RuntimeException("Job execution request failed");
+                    }
+                }
+
+                // Send each start URL to every worker's `pushdata` link filter bolt route. They
+                // will only execute locally if the tuple belongs to them.
+                for (String startUrl : seedUrls) {
+                    String domain = (new URLInfo(startUrl)).getBaseUrl();
+                    Values<Object> urlValues = new Values<Object>(domain, startUrl);
+                    Tuple urlTuple = new Tuple(new Fields("domain", "url"), urlValues, "master");
+
+                    for (String dest : workerAddrs) {
+                        String url = dest + "/" + "pushdata/" + LINK_FILTER_BOLT;
+                        String body = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(urlTuple);
+                        if (HTTP.sendData(url, POST_REQUEST, body) != HttpURLConnection.HTTP_OK) {
+                            throw new RuntimeException("Start url pushdata request failed");
+                        }
                     }
                 }
 
@@ -114,7 +131,27 @@ public class CrawlMaster {
                 System.exit(0);
             }
 
+            response.redirect("/");
             return "Started!";
+        });
+    }
+
+    private void defineWorkerStatusRoute() {
+        get("/workerstatus", (request, response) -> {
+            log.info("Received worker status from " + request.ip() + " with parameters: " + request.queryString());
+
+            String addr = request.ip() + ":" + request.queryParams("port");
+            synchronized (workerLookup) {
+                if (workerLookup.containsKey(addr)) {
+                    log.info("Updating worker " + addr);
+                    workerLookup.get(addr).update(request);
+                } else {
+                    log.info("Adding new worker " + addr);
+                    workers.add(addr);
+                    workerLookup.put(addr, new WorkerData(request));
+                }
+            }
+            return "Status updated!";
         });
     }
 
@@ -122,13 +159,14 @@ public class CrawlMaster {
         get("/shutdown", (request, response) -> {
             log.info("Shutting down");
 
-            // TODO: hardcoded
-            String addr = "127.0.0.1:8001";
-            HTTP.sendData("http://" + addr + "/shutdown", GET_REQUEST, "");
-            addr = "127.0.0.1:8002";
-            HTTP.sendData("http://" + addr + "/shutdown", GET_REQUEST, "");
+            synchronized (workerLookup) {
+                for (String addr : workers) {
+                    HTTP.sendData("http://" + addr + "/shutdown", GET_REQUEST, "");
+                }
+            }
 
             isRunning.set(false);
+            response.redirect("/");
             return "Shutdown has started!";
         });
     }
@@ -149,23 +187,91 @@ public class CrawlMaster {
         shutdownThread.start();
     }
 
+    private String getWorkerList() {
+        synchronized (workerLookup) {
+            String result = "";
+            for (String addr : workers) {
+                if (workerLookup.get(addr).isActive()) {
+                    result += addr + ",";
+                }
+            }
+
+            if (result.length() > 0 && result.charAt(result.length() - 1) == ',') {
+                result = result.substring(0, result.length() - 1);
+            }
+
+            // Example: [127.0.0.1:8001,127.0.0.1:8002]
+            log.info("Building workerList [" + result + "]");
+            return "[" + result + "]";
+        }
+    }
+
+    private Topology setupTopology() {
+        // Setup StormLite topology.
+        UrlSpout urlSpout = new UrlSpout();
+        DocumentFetcherBolt docFetcherBolt = new DocumentFetcherBolt();
+        LinkExtractorBolt linkExtractorBolt = new LinkExtractorBolt();
+        LinkFilterBolt linkFilterBolt = new LinkFilterBolt();
+        TopologyBuilder builder = new TopologyBuilder();
+
+        builder.setSpout(URL_SPOUT, urlSpout, 100);
+        builder.setBolt(DOC_FETCHER_BOLT, docFetcherBolt, 100).fieldsGrouping(URL_SPOUT, new Fields("domain"));
+        builder.setBolt(LINK_EXTRACTOR_BOLT, linkExtractorBolt, 100).fieldsGrouping(DOC_FETCHER_BOLT,
+                new Fields("domain"));
+        builder.setBolt(LINK_FILTER_BOLT, linkFilterBolt, 100).fieldsGrouping(LINK_EXTRACTOR_BOLT,
+                new Fields("domain"));
+
+        return builder.createTopology();
+    }
+
+    private String getWorkerStatuses() {
+        int i = 0;
+        String res = "";
+        int total = 0;
+        synchronized (workerLookup) {
+            for (String addr : workers) {
+                WorkerData data = workerLookup.get(addr);
+
+                if (data.isActive()) {
+                    res += (i++) + ": " + data + "<br>";
+                    total += data.count;
+                }
+            }
+        }
+        crawlTotal = total;
+        res += "total: " + total + "<br>";
+        return res;
+    }
+
+    private String getTimeStatus() {
+        if (crawlStartTime == -1) {
+            return "";
+        }
+        long totalSeconds = (System.currentTimeMillis() - crawlStartTime) / 1000;
+        long hours = totalSeconds / 60 / 60;
+        long minutes = (totalSeconds % (60 * 60)) / 60;
+        long seconds = totalSeconds % 60;
+
+        return "<h2>Time Info</h2><div>Total Seconds: " + totalSeconds + "<br>Hours: " + hours + "<br>Minutes: "
+                + minutes + "<br>Seconds: " + seconds + "<br>Rate: " + crawlTotal / totalSeconds + "</div>";
+    }
+
     public static void main(String[] args) {
-        org.apache.logging.log4j.core.config.Configurator.setLevel("edu.upenn", Level.ALL);
+        org.apache.logging.log4j.core.config.Configurator.setLevel("edu.upenn", Level.INFO);
 
         // Process arguments.
         if (args.length != 4) {
             System.out.println(
-                    "Usage: CrawlMaster {port number} {start URL} {max doc size in MB} {number of files to index}");
+                    "Usage: CrawlMaster {port number} {seed url file} {max doc size in MB} {number of threads per worker}");
             System.exit(1);
         }
 
-        // TODO: start url should prob be a file of seed urls, for now we hardcode
         int port = Integer.valueOf(args[0]);
-        String startUrl = args[1];
+        String seedUrlFile = args[1];
         Integer maxDocSize = Integer.valueOf(args[2]);
-        Integer maxCrawlCount = Integer.valueOf(args[3]);
+        Integer crawlThreads = Integer.valueOf(args[3]);
 
         // Start CrawlMaster server.
-        new CrawlMaster(port, startUrl, maxDocSize, maxCrawlCount);
+        new CrawlMaster(port, seedUrlFile, maxDocSize, crawlThreads);
     }
 }

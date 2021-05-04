@@ -22,9 +22,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.logging.log4j.Logger;
@@ -70,9 +70,9 @@ public class DistributedCluster implements Runnable {
 
 	ObjectMapper mapper = new ObjectMapper();
 
-	ExecutorService executor = Executors.newFixedThreadPool(1);
+	ExecutorService executor;
 
-	Queue<ITask> taskQueue = new ConcurrentLinkedQueue<ITask>();
+	FairTaskQueue fairTaskQueue = new FairTaskQueue();
 
 	/**
 	 * Sets up the topology, instantiating objects (executors) on the local machine.
@@ -87,10 +87,12 @@ public class DistributedCluster implements Runnable {
 	 * @return
 	 * @throws ClassNotFoundException
 	 */
-	public TopologyContext submitTopology(String name, Config config, Topology topo) throws ClassNotFoundException {
-		theTopology = name;
+	public TopologyContext submitTopology(String name, Config config, Topology topo, int threads)
+			throws ClassNotFoundException {
 
-		context = new TopologyContext(topo, taskQueue);
+		executor = Executors.newFixedThreadPool(threads);
+		theTopology = name;
+		context = new TopologyContext(topo, fairTaskQueue);
 
 		boltStreams.clear();
 		spoutStreams.clear();
@@ -99,6 +101,8 @@ public class DistributedCluster implements Runnable {
 		createSpoutInstances(topo, config);
 
 		createBoltInstances(topo, config);
+
+		fairTaskQueue.addClass(SenderBolt.class.getName());
 
 		createRoutes(topo, config);
 		scheduleSpouts();
@@ -120,15 +124,23 @@ public class DistributedCluster implements Runnable {
 	 */
 	public void run() {
 		while (!quit.get()) {
-			ITask task = taskQueue.poll();
-			if (task == null)
+			Queue<ITask> taskQueue = fairTaskQueue.nextQueue();
+
+			if (taskQueue == null) {
+				log.error("Fair task queue empty");
 				Thread.yield();
-			else {
-				// log.debug("Task: " + task.toString());
-				executor.execute(task);
+				continue;
 			}
+
+			ITask task = taskQueue.poll();
+			if (task == null) {
+				Thread.yield();
+				continue;
+			}
+
+			// log.info("Task: " + task.toString());
+			executor.execute(task);
 		}
-		executor.shutdown();
 	}
 
 	/**
@@ -137,7 +149,9 @@ public class DistributedCluster implements Runnable {
 	private void scheduleSpouts() {
 		for (String key : spoutStreams.keySet())
 			for (IRichSpout spout : spoutStreams.get(key)) {
-				taskQueue.add(new SpoutTask(spout, taskQueue));
+				String className = spout.getClass().getName();
+				Queue<ITask> taskQueue = fairTaskQueue.getQueue(className);
+				fairTaskQueue.addTask(className, new SpoutTask(spout, taskQueue));
 			}
 	}
 
@@ -151,6 +165,8 @@ public class DistributedCluster implements Runnable {
 	private void createSpoutInstances(Topology topo, Config config) throws ClassNotFoundException {
 		for (String key : topo.getSpouts().keySet()) {
 			StringIntPair spout = topo.getSpout(key);
+
+			fairTaskQueue.addClass(spout.getLeft());
 
 			spoutStreams.put(key, new ArrayList<IRichSpout>());
 			for (int i = 0; i < spout.getRight(); i++)
@@ -181,6 +197,8 @@ public class DistributedCluster implements Runnable {
 	private void createBoltInstances(Topology topo, Config config) throws ClassNotFoundException {
 		for (String key : topo.getBolts().keySet()) {
 			StringIntPair bolt = topo.getBolt(key);
+
+			fairTaskQueue.addClass(bolt.getLeft());
 
 			boltStreams.put(key, new ArrayList<IRichBolt>());
 			int localExecutors = bolt.getRight();
@@ -286,17 +304,12 @@ public class DistributedCluster implements Runnable {
 	 * @param string
 	 */
 	public void killTopology(String string) {
+		executor.shutdown();
 		if (quit.getAndSet(true) == false) {
 			while (!quit.get())
 				Thread.yield();
 		}
-		// System.out.println(context.getMapOutputs() + " local map outputs and " +
-		// context.getReduceOutputs()
-		// + " local reduce outputs.");
-
-		// for (String key : context.getSendOutputs().keySet())
-		// System.out.println("Sent " + context.getSendOutputs().get(key) + " to " +
-		// key);
+		awaitTermination();
 	}
 
 	/**
@@ -311,5 +324,13 @@ public class DistributedCluster implements Runnable {
 
 	public StreamRouter getStreamRouter(String stream) {
 		return streams.get(stream);
+	}
+
+	public void awaitTermination() {
+		try {
+			executor.awaitTermination(25, TimeUnit.SECONDS);
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
 	}
 }

@@ -5,8 +5,6 @@ import java.util.UUID;
 
 import static edu.upenn.cis.cis455.crawler.utils.Constants.*;
 
-import edu.upenn.cis.cis455.crawler.CrawlerQueue;
-import edu.upenn.cis.cis455.crawler.utils.CrawlerState;
 import edu.upenn.cis.cis455.storage.DatabaseEnv;
 import edu.upenn.cis.cis455.storage.StorageFactory;
 import edu.upenn.cis.stormlite.OutputFieldsDeclarer;
@@ -35,11 +33,6 @@ public class LinkFilterBolt implements IRichBolt {
     String executorId = UUID.randomUUID().toString();
 
     /**
-     * Domain based frontier queue for urls to be processed.
-     */
-    CrawlerQueue queue;
-
-    /**
      * Interface for database methods.
      */
     DatabaseEnv database;
@@ -55,35 +48,32 @@ public class LinkFilterBolt implements IRichBolt {
 
     @Override
     public void prepare(Map<String, String> config, TopologyContext context, OutputCollector coll) {
-        queue = CrawlerQueue.getSingleton();
-        database = (DatabaseEnv) StorageFactory.getDatabaseInstance(config.get(DATABASE_DIRECTORY));
+        database = StorageFactory.getDatabaseInstance(config.get(DATABASE_DIRECTORY));
     }
 
     @Override
     public boolean execute(Tuple input) {
         String url = input.getStringByField("url");
-        logger.info(getExecutorId() + " received " + url);
+        logger.debug(getExecutorId() + " received " + url);
+        logger.debug(url + ": filtering");
 
-        if (CrawlerState.isShutdown) {
+        if (url == null || url.equals("")) {
             return true;
         }
 
         if (database.containsUrl(url)) {
-            logger.info(url + ": url seen before");
+            logger.debug(url + ": url seen before");
             return true;
         }
 
+        database.addUrlSeen(url);
         database.addUrl(url);
-        queue.addUrl(url);
-        logger.info(url + ": added to queue");
+        logger.debug(url + ": added to queue");
         return true;
     }
 
     @Override
     public void cleanup() {
-        if (database != null) {
-            database.close();
-        }
     }
 
     @Override

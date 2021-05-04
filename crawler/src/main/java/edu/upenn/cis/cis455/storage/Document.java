@@ -11,7 +11,7 @@ import com.sleepycat.persist.model.SecondaryKey;
 public class Document {
 
     @PrimaryKey(sequence = "docId")
-    public int id;
+    public long id;
 
     @SecondaryKey(relate = Relationship.ONE_TO_ONE)
     public String url;
@@ -25,17 +25,11 @@ public class Document {
     private Document() {
     } // For bindings
 
-    public Document(String documentUrl, String documentContent) {
+    public Document(String documentUrl, String documentContent, String type) {
         url = documentUrl;
         content = documentContent;
-    }
-
-    public void setContent(String documentContent) {
-        content = documentContent;
-    }
-
-    public void setContentType(String type) {
         contentType = type;
+        updateLastFetchedDate();
     }
 
     public void updateLastFetchedDate() {
@@ -45,7 +39,7 @@ public class Document {
     public String toString() {
         StringBuffer buffer = new StringBuffer("Document[");
         buffer.append("id=").append(id).append(",url=").append(url).append(",content=")
-                .append(content.substring(0, Integer.min(content.length(), 10))).append("]");
+                .append(content.substring(0, Integer.min(content.length(), 40))).append("]");
         return buffer.toString() + "\n";
     }
 }

@@ -1,5 +1,7 @@
 package edu.upenn.cis.cis455.crawler.utils;
 
+import java.net.MalformedURLException;
+
 /**
  * Helper class that shows how to parse URLs to obtain host name, port number
  * and file path
@@ -14,9 +16,9 @@ public class URLInfo {
     /**
      * Constructor called with raw URL as input.
      */
-    public URLInfo(String docURL) {
+    public URLInfo(String docURL) throws MalformedURLException {
         if (docURL == null || docURL.equals(""))
-            return;
+            throw new MalformedURLException();
         docURL = docURL.trim();
 
         if (docURL.startsWith("https://")) {
@@ -25,7 +27,7 @@ public class URLInfo {
         }
 
         if (!docURL.startsWith("http://") || docURL.length() < 8)
-            return;
+            throw new MalformedURLException();
         // Stripping off 'http://'
         docURL = docURL.substring(7);
 

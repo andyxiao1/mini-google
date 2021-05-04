@@ -46,10 +46,10 @@ public class RobotsInfo {
     }
 
     private void parseRobotsFile(String robotsFile) {
-        logger.info("Parsing robots.txt");
+        logger.debug("Parsing robots.txt");
 
         if (robotsFile == null) {
-            logger.info("robots.txt file is null (request error or dne) so we will assume no restrictions");
+            logger.debug("robots.txt file is null (request error or dne) so we will assume no restrictions");
             return;
         }
 
@@ -61,7 +61,7 @@ public class RobotsInfo {
             currLine = findFirstBlock(lines, "*");
         }
         if (currLine == -1) {
-            logger.info("Found no matching user-agents");
+            logger.debug("Found no matching user-agents");
             return;
         }
         currLine++;
@@ -85,7 +85,7 @@ public class RobotsInfo {
                     continue;
                 }
             } else {
-                logger.info("Unsupported rule: " + line);
+                logger.debug("Unsupported rule: " + line);
             }
         }
     }

@@ -97,7 +97,7 @@ public class SenderBolt implements IRichBolt {
         log.debug("Sender is routing " + tuple.toString() + " from " + tuple.getSourceExecutor() + " to "
                 + url.toString());
 
-        if (CrawlerState.isShutdown) {
+        if (CrawlerState.isShutdown.get()) {
             return;
         }
 
