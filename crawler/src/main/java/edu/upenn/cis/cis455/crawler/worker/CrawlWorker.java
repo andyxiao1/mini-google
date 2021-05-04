@@ -180,14 +180,13 @@ public class CrawlWorker {
     }
 
     private void shutdown() {
-        System.out.println(database);
-        System.out.println("Crawl Count: " + CrawlerState.count.get());
-
         CrawlerState.isShutdown.set(true);
         cluster.killTopology("");
         cluster.shutdown();
-        cluster.awaitTermination();
         stop();
+
+        System.out.println(database);
+        System.out.println("Crawl Count: " + CrawlerState.count.get());
         database.close();
 
         try {
