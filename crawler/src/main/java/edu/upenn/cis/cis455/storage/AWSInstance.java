@@ -141,7 +141,7 @@ public class AWSInstance {
         item.put("startIdx", new AttributeValue().withN(Integer.toString(startIdx)));
         item.put("endIdx", new AttributeValue().withN(Integer.toString(endIdx)));
 
-        System.out.println("num byteS: " + currentS3Document.getBytes().length);
+        // System.out.println("num byteS: " + currentS3Document.getBytes().length);
         if (currentS3Document.getBytes().length > max_doc_size) {
             createFileInS3(docname, currentS3Document);
             currentS3Document = "";
@@ -252,68 +252,68 @@ public class AWSInstance {
     public static void main(String[] args) throws Exception {
         /*
          * AWSInstance instance = new AWSInstance();
-         * 
-         * 
+         *
+         *
          * FileWriter csvWriter; String name = "adam"+".csv"; File f = new File(name);
          * try {
-         * 
+         *
          * f.createNewFile(); //f.setReadable(true); // f.setWritable(true);
          * //f.deleteOnExit();
-         * 
+         *
          * csvWriter = new FileWriter(f); // CSVWriter writer = new
          * CSVWriter(csvWriter);
-         * 
+         *
          * String csvContent = ""; csvContent += "src,dst\n"; csvWriter.append("src");
          * csvWriter.append(","); csvWriter.append("dst"); csvWriter.append("\n");
-         * 
-         * 
+         *
+         *
          * csvContent += "src,dst\n";
-         * 
+         *
          * //add data to csv HashMap<String,Set<String>> urlToDest = new
          * HashMap<String,Set<String>>(); urlToDest.put("test1", new HashSet<String>());
          * urlToDest.get("test1").add("test2"); for (Map.Entry<String, Set<String>>
          * urlPair : urlToDest.entrySet()) {
-         * 
+         *
          * for (String s : urlPair.getValue()) {
-         * 
+         *
          * csvContent += String.join(",", urlPair.getKey(), s) + "\n";
-         * 
+         *
          * csvWriter.append(String.join(",", urlPair.getKey(), s));
          * csvWriter.append("\n"); }
-         * 
+         *
          * }
-         * 
+         *
          * csvWriter.flush(); csvWriter.close(); s3.putObject(new
          * PutObjectRequest("555finalproject" + "/urlmap", "test2.csv", f));
-         * 
-         * 
+         *
+         *
          * } catch (IOException e) { // TODO Auto-generated catch block
          * e.printStackTrace(); }
-         * 
-         * 
-         * 
+         *
+         *
+         *
          */
         /*
          * AWSInstance instance = new AWSInstance();
-         * 
-         * 
+         *
+         *
          * String id = Security.md5Hash("https://en.wikipedia.org/wiki/Main_Page");
          * Map<String, AttributeValue> item = new HashMap<String, AttributeValue>();
-         * 
+         *
          * item.put("id", new AttributeValue(id));
-         * 
+         *
          * Map<String, AttributeValue> map =
          * dynamoDB.getItem("documents",item).getItem();
-         * 
+         *
          * String docname = map.get("docname").getS(); int endIdx =
          * Integer.parseInt(map.get("endIdx").getN()); int startIdx =
          * Integer.parseInt(map.get("startIdx").getN()); System.out.println(docname);
          * System.out.println(endIdx);
-         * 
+         *
          * S3Object object = s3.getObject(new GetObjectRequest("555finalproject",
          * docname));
-         * 
-         * 
+         *
+         *
          * byte[] content = object.getObjectContent().readAllBytes();
          * System.out.println(new String(content, "UTF-8").substring(startIdx,endIdx));
          */
