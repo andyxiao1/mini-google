@@ -101,6 +101,7 @@ public class UrlSpout implements IRichSpout {
 
         // Check that url is not disallowed. If it is disallowed, drop it.
         if (!isUrlAllowed(url, robotsInfo)) {
+            database.crawlQueueAddRight(domain);
             logger.debug(url + ": not allowed by robots.txt");
             return true;
         }
