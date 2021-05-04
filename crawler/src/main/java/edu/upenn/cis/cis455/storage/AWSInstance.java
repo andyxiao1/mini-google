@@ -1,12 +1,20 @@
 package edu.upenn.cis.cis455.storage;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import com.amazonaws.AmazonClientException;
@@ -18,6 +26,7 @@ import com.amazonaws.regions.Region;
 import com.amazonaws.regions.Regions;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
+import com.amazonaws.services.dynamodbv2.document.Table;
 import com.amazonaws.services.dynamodbv2.model.AttributeDefinition;
 import com.amazonaws.services.dynamodbv2.model.AttributeValue;
 import com.amazonaws.services.dynamodbv2.model.ComparisonOperator;
@@ -39,14 +48,24 @@ import com.amazonaws.services.dynamodbv2.util.TableUtils.TableNeverTransitionedT
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.Bucket;
+import com.amazonaws.services.s3.model.GetObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectRequest;
+import com.amazonaws.services.s3.model.S3Object;
+
+import edu.upenn.cis.cis455.crawler.utils.Security;
 
 public class AWSInstance {
 
     static AmazonDynamoDB dynamoDB;
     private String tableName;
     private String bucketName;
-    private int numDocs;
+    private int docIndex;
+    private final int max_doc_size = 100000000;
+    String currentS3Document = "";
+    private Map<String, Set<String>> urlToDests = new HashMap<String, Set<String>>();
+    private String filePath;
+    private String docname;
+
     static AmazonS3 s3;
 
     public AWSInstance() {
@@ -67,122 +86,156 @@ public class AWSInstance {
 
         s3 = AmazonS3ClientBuilder.standard().withCredentials(credentialsProvider).withRegion("us-east-1").build();
 
-        bucketName = "cis455-finalproject";
-
+        bucketName = "555finalproject";
+        filePath = "url_mappings.csv";
         dynamoDB = AmazonDynamoDBClientBuilder.standard().withCredentials(credentialsProvider).withRegion("us-east-1")
                 .build();
+        docname = UUID.randomUUID().toString();
 
-        tableName = "docs";
-        CreateTableRequest createTableRequest = new CreateTableRequest().withTableName(tableName)
-                .withKeySchema(new KeySchemaElement().withAttributeName("name").withKeyType(KeyType.HASH))
-                .withAttributeDefinitions(
-                        new AttributeDefinition().withAttributeName("name").withAttributeType(ScalarAttributeType.S))
-                .withProvisionedThroughput(
-                        new ProvisionedThroughput().withReadCapacityUnits(1L).withWriteCapacityUnits(1L));
-
-        // Create table if it does not exist yet
-
-        TableUtils.createTableIfNotExists(dynamoDB, createTableRequest);
-        // wait for the table to move into ACTIVE state
-        try {
-            TableUtils.waitUntilActive(dynamoDB, tableName);
-        } catch (TableNeverTransitionedToStateException e) {
-            e.printStackTrace();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
+        tableName = "documents";
 
         DescribeTableRequest describeTableRequest = new DescribeTableRequest().withTableName(tableName);
         TableDescription tableDescription = dynamoDB.describeTable(describeTableRequest).getTable();
 
-        numDocs = Math.toIntExact(tableDescription.getItemCount());
-        // System.out.println("num docs: " + numDocs);
-
-        // DescribeTableRequest describeTableRequest = new
-        // DescribeTableRequest().withTableName(tableName);
-
-        // TableDescription tableDescription =
-        // dynamoDB.describeTable(describeTableRequest).getTable();
-
     }
 
-    // public int putDocument(String url, String content) {
-
-    // int id = url.hashCode();
-    // Map<String, AttributeValue> item = new HashMap<String, AttributeValue>();
-
-    // item.put("url", new AttributeValue(url));
-    // item.put("id", new AttributeValue().withN(Integer.toString(id)));
-    // item.put("content", new AttributeValue(content));
-
-    // PutItemRequest putItemRequest = new PutItemRequest(tableName, item);
-    // PutItemResult putItemResult = dynamoDB.putItem(putItemRequest);
-    // return id;
-    // }
-
-    public int putDocument(Document doc) {
-
-        String url = doc.url;
-        String content = doc.content;
-
-        int id = url.hashCode();
-        String urlhash = "" + id;
-        String contentHash = "" + content.hashCode();
-
+    public synchronized String getDocument(String url) {
+        String id = Security.md5Hash("https://en.wikipedia.org/wiki/Main_Page");
         Map<String, AttributeValue> item = new HashMap<String, AttributeValue>();
 
-        item.put("url", new AttributeValue(url));
-        item.put("id", new AttributeValue().withN(Integer.toString(id)));
-        item.put("contentHash", new AttributeValue(contentHash));
+        item.put("id", new AttributeValue(id));
 
-        PutItemRequest putItemRequest = new PutItemRequest(tableName, item);
-        PutItemResult putItemResult = dynamoDB.putItem(putItemRequest);
+        Map<String, AttributeValue> map = dynamoDB.getItem("documents", item).getItem();
 
-        createFileInS3(urlhash, content);
+        String docname = map.get("docname").getS();
+        int endIdx = Integer.parseInt(map.get("endIdx").getN());
+        int startIdx = Integer.parseInt(map.get("startIdx").getN());
+        System.out.println(docname);
+        System.out.println(endIdx);
 
-        return id;
+        S3Object object = s3.getObject(new GetObjectRequest("555finalproject", docname));
 
-    }
-
-    public int putDocument(String url, String content) {
-
-        int id = url.hashCode();
-        String urlhash = "" + id;
-        String contentHash = "" + content.hashCode();
-
-        Map<String, AttributeValue> item = new HashMap<String, AttributeValue>();
-
-        item.put("url", new AttributeValue(url));
-        item.put("id", new AttributeValue().withN(Integer.toString(id)));
-        item.put("contentHash", new AttributeValue(contentHash));
-
-        PutItemRequest putItemRequest = new PutItemRequest(tableName, item);
-        PutItemResult putItemResult = dynamoDB.putItem(putItemRequest);
-
-        createFileInS3(urlhash, content);
-
-        return id;
-
-    }
-
-    // public Document getDocument(int id) {
-    // Map<String, AttributeValue> item = new HashMap<String, AttributeValue>();
-    // item.put("id", new AttributeValue().withN(Integer.toString(id)));
-    // Map<String, AttributeValue> map = dynamoDB.getItem(tableName,
-    // item).getItem();
-
-    // return new Document(map.get("url").getS());
-
-    // }
-
-    public void createFileInS3(String hashedUrl, String contents) {
-
+        byte[] content;
         try {
-            s3.putObject(new PutObjectRequest(bucketName, hashedUrl, createFile(hashedUrl, contents)));
+            content = object.getObjectContent().readAllBytes();
+            return (new String(content, "UTF-8").substring(startIdx, endIdx));
         } catch (IOException e) {
             // TODO Auto-generated catch block
             e.printStackTrace();
         }
+        return "ERROR";
+    }
+
+    public synchronized String putDocument(String url, String content, String executorId) {
+
+        String id = Security.md5Hash(url);
+        String contentHash = "" + content.hashCode();
+
+        Map<String, AttributeValue> item = new HashMap<String, AttributeValue>();
+
+        int startIdx = currentS3Document.length();
+        currentS3Document += "*startid" + id + "*\n" + content + "\n*endid*\n";
+        int endIdx = currentS3Document.length();
+
+        item.put("url", new AttributeValue(url));
+        item.put("id", new AttributeValue(id));
+        item.put("contentHash", new AttributeValue(contentHash));
+        item.put("docname", new AttributeValue(docname));
+        item.put("startIdx", new AttributeValue().withN(Integer.toString(startIdx)));
+        item.put("endIdx", new AttributeValue().withN(Integer.toString(endIdx)));
+
+        System.out.println("num byteS: " + currentS3Document.getBytes().length);
+        if (currentS3Document.getBytes().length > max_doc_size) {
+            createFileInS3(docname, currentS3Document);
+            currentS3Document = "";
+            resetDocname();
+        }
+
+        if (urlToDests.size() > 10000) {
+            sendURLStoS3();
+            urlToDests = new HashMap<String, Set<String>>();
+        }
+
+        PutItemRequest putItemRequest = new PutItemRequest(tableName, item);
+        PutItemResult putItemResult = dynamoDB.putItem(putItemRequest);
+
+        return id;
+
+    }
+
+    private void resetDocname() {
+        docname = UUID.randomUUID().toString();
+    }
+
+    public void createFileInS3(String hashedUrl, String contents) {
+
+        try {
+            s3.putObject(new PutObjectRequest(bucketName, hashedUrl, createFile(hashedUrl, contents, ".txt")));
+        } catch (IOException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
+
+    }
+
+    public void close() {
+        sendURLStoS3();
+        createFileInS3(docname, currentS3Document);
+
+    }
+
+    private void sendURLStoS3() {
+        File f = createCSV(docname);
+        s3.putObject(new PutObjectRequest(bucketName + "/urlmap", docname, f));
+
+    }
+
+    public File createCSV(String fn) {
+
+        FileWriter csvWriter;
+        String name = fn + ".csv";
+        File f = new File(name);
+        try {
+
+            f.createNewFile();
+            // f.setReadable(true);
+            // f.setWritable(true);
+            f.deleteOnExit();
+
+            csvWriter = new FileWriter(f);
+            // CSVWriter writer = new CSVWriter(csvWriter);
+
+            String csvContent = "";
+            csvContent += "src,dst\n";
+            csvWriter.append("src");
+            csvWriter.append(",");
+            csvWriter.append("dst");
+            csvWriter.append("\n");
+
+            csvContent += "src,dst\n";
+
+            // add data to csv
+            for (Map.Entry<String, Set<String>> urlPair : urlToDests.entrySet()) {
+
+                for (String s : urlPair.getValue()) {
+
+                    csvContent += String.join(",", urlPair.getKey(), s) + "\n";
+
+                    csvWriter.append(String.join(",", urlPair.getKey(), s));
+                    csvWriter.append("\n");
+                }
+
+            }
+
+            csvWriter.flush();
+            csvWriter.close();
+
+        } catch (IOException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
+
+        return f;
 
     }
 
@@ -194,8 +247,8 @@ public class AWSInstance {
      *
      * @throws IOException
      */
-    private static File createFile(String filename, String content) throws IOException {
-        File file = File.createTempFile(filename, ".txt");
+    private static File createFile(String filename, String content, String suffix) throws IOException {
+        File file = File.createTempFile(filename, suffix);
         file.deleteOnExit();
 
         Writer writer = new OutputStreamWriter(new FileOutputStream(file));
@@ -208,9 +261,38 @@ public class AWSInstance {
 
     // for testing purposes
     public static void main(String[] args) throws Exception {
-        AWSInstance instance = new AWSInstance();
-        System.out.println(instance.putDocument(new Document("test2", "test2", "test2")));
-        // System.out.println(instance.getDocument(1));
+        /*
+         * AWSInstance instance = new AWSInstance();
+         *
+         * String id = Security.md5Hash("https://en.wikipedia.org/wiki/Main_Page");
+         * Map<String, AttributeValue> item = new HashMap<String, AttributeValue>();
+         *
+         * item.put("id", new AttributeValue(id));
+         *
+         * Map<String, AttributeValue> map =
+         * dynamoDB.getItem("documents",item).getItem();
+         *
+         * String docname = map.get("docname").getS(); int endIdx =
+         * Integer.parseInt(map.get("endIdx").getN()); int startIdx =
+         * Integer.parseInt(map.get("startIdx").getN()); System.out.println(docname);
+         * System.out.println(endIdx);
+         *
+         * S3Object object = s3.getObject(new GetObjectRequest("555finalproject",
+         * docname));
+         *
+         *
+         * byte[] content = object.getObjectContent().readAllBytes();
+         * System.out.println(new String(content, "UTF-8").substring(startIdx,endIdx));
+         */
+    }
+
+    public synchronized void addUrl(String url, String domain) {
+        // System.out.println("url sent: " + docIndex++);
+        if (!urlToDests.containsKey(Security.md5Hash(url))) {
+            urlToDests.put(Security.md5Hash(url), new HashSet<String>());
+        }
+        urlToDests.get(Security.md5Hash(url)).add(Security.md5Hash(domain));
+
     }
 
 }

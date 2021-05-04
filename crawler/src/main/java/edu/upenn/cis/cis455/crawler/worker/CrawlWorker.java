@@ -14,6 +14,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import edu.upenn.cis.cis455.crawler.utils.CrawlerState;
 import edu.upenn.cis.cis455.crawler.utils.HTTP;
+import edu.upenn.cis.cis455.storage.AWSFactory;
 import edu.upenn.cis.cis455.storage.DatabaseEnv;
 import edu.upenn.cis.cis455.storage.StorageFactory;
 import edu.upenn.cis.stormlite.Config;
@@ -187,6 +188,7 @@ public class CrawlWorker {
 
         System.out.println(database);
         System.out.println("Crawl Count: " + CrawlerState.count.get());
+        AWSFactory.getDatabaseInstance().close();
         database.close();
 
         try {
