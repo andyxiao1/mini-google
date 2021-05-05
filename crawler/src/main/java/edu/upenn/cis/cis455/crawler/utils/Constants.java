@@ -1,9 +1,5 @@
 package edu.upenn.cis.cis455.crawler.utils;
 
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
-
 public final class Constants {
 
     private Constants() {
@@ -44,7 +40,4 @@ public final class Constants {
     public static final String CONTENT_LENGTH_HEADER = "Content-Length";
 
     public static final String HTML_CONTENT_TYPE = "text/html";
-
-    public static final String[] VALID_FILE_TYPES = new String[] { "text/html", "text/xml", "application/xml" };
-    public static final Set<String> VALID_FILE_TYPES_SET = new HashSet<String>(Arrays.asList(VALID_FILE_TYPES));
 }

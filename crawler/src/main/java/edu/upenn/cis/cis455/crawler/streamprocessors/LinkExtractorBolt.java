@@ -8,6 +8,7 @@ import static edu.upenn.cis.cis455.crawler.utils.Constants.*;
 
 import edu.upenn.cis.cis455.storage.AWSFactory;
 import edu.upenn.cis.cis455.storage.AWSInstance;
+import edu.upenn.cis.cis455.crawler.utils.CrawlerState;
 import edu.upenn.cis.cis455.crawler.utils.URLInfo;
 import edu.upenn.cis.cis455.storage.DatabaseEnv;
 import edu.upenn.cis.cis455.storage.StorageFactory;
@@ -75,24 +76,23 @@ public class LinkExtractorBolt implements IRichBolt {
 
     @Override
     public boolean execute(Tuple input) {
+        String urlDomain = input.getStringByField("domain");
         String url = input.getStringByField("url");
-
         String document = input.getStringByField("document");
-        String contentType = input.getStringByField("contentType");
+        String requestTime = input.getStringByField("requestTime");
 
         logger.debug(getExecutorId() + " received document for " + url);
-        logger.debug(url + ": extracting links, type=" + contentType);
+        logger.debug(url + ": extracting links");
 
-        // Only parse html documents for links.
-        if (contentType == null || !contentType.equals(HTML_CONTENT_TYPE)) {
-            logger.debug(url + ": not parsing because it is not an html file");
+        Document doc = Jsoup.parse(document, url);
+        Elements links = doc.getElementsByAttribute("href");
+
+        if (!isDocumentValid(document, links)) {
+            logger.info(url + ": Low quality document.");
             return true;
         }
 
         // Parse for links and emit.
-        logger.debug(url + ": parse start");
-        Document doc = Jsoup.parse(document, url);
-        Elements links = doc.getElementsByAttribute("href");
         for (Element link : links) {
             String linkHref = link.attr("abs:href");
             logger.debug(getExecutorId() + " emitting new link " + linkHref);
@@ -110,6 +110,18 @@ public class LinkExtractorBolt implements IRichBolt {
             collector.emit(new Values<Object>(domain, linkHref), getExecutorId());
         }
         logger.debug(url + ": parse end, total links emitted=" + links.size());
+
+        // Store document in appropriate database.
+        logger.info(url + ": storing document");
+        if (environment.equals(LOCAL)) {
+            database.addDocument(url, document);
+        } else if (environment.equals(AWS)) {
+            String docExcerpt = doc.text().substring(0, Integer.min(300, doc.text().length()));
+            String title = doc.title().substring(0, Integer.min(100, doc.title().length()));
+            awsEnv.putDocument(url, document, links.size(), requestTime, urlDomain, docExcerpt, title);
+        }
+        CrawlerState.count.incrementAndGet();
+
         return true;
     }
 
@@ -125,5 +137,17 @@ public class LinkExtractorBolt implements IRichBolt {
     @Override
     public Fields getSchema() {
         return schema;
+    }
+
+    private boolean isDocumentValid(String content, Elements links) {
+        if (content.length() < 200) {
+            return false;
+        }
+
+        if (links.size() == 0) {
+            return false;
+        }
+
+        return true;
     }
 }

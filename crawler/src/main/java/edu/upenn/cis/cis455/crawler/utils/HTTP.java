@@ -22,6 +22,7 @@ public class HTTP {
             Map<String, String> responseHeaders) {
 
         logger.debug("Making request at " + new Timestamp(System.currentTimeMillis()));
+        long start = System.currentTimeMillis();
 
         HttpURLConnection connection = null;
         InputStream responseStream = null;
@@ -75,6 +76,10 @@ public class HTTP {
                 if (lastModified != null) {
                     responseHeaders.put("Last-Modified", lastModified.trim());
                 }
+
+                long end = System.currentTimeMillis();
+                double requestTime = ((double) end) / start / 1000;
+                responseHeaders.put("Request-Time", Double.toString(requestTime));
             }
 
             if (rlen > -1) {
