@@ -96,7 +96,7 @@ public class DocumentFetcherBolt implements IRichBolt {
         }
         logger.debug(url + ": validated");
 
-        logger.info(url + ": downloading");
+        logger.debug(url + ": downloading");
         String content = HTTP.makeRequest(url, GET_REQUEST, maxDocumentSize, null);
 
         if (content == null) {
@@ -107,13 +107,13 @@ public class DocumentFetcherBolt implements IRichBolt {
         // Content-seen filter.
         String hash = Security.md5Hash(content);
         if (database.containsHashContent(hash)) {
-            logger.info(url + ": content seen before");
+            logger.debug(url + ": content seen before");
             return true;
         }
         database.addContentSeen(hash);
 
         // Store document in database.
-        logger.info(url + ": storing document in aws");
+        logger.info(url + ": storing document");
         String contentType = responseHeaders.get(CONTENT_TYPE_HEADER);
 
         // Check where we should store document

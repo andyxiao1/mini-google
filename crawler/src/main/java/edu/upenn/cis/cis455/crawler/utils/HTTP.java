@@ -86,13 +86,13 @@ public class HTTP {
             logger.error(urlStr + ": Timed Out at " + new Timestamp(System.currentTimeMillis()));
             logger.debug(e);
         } catch (MalformedURLException e) {
-            logger.debug("Malformed URL: " + urlStr);
+            logger.error(urlStr + ": Error Malformed URL");
             logger.debug(e);
         } catch (UnsupportedEncodingException e) {
-            logger.debug("Error converting body byte array to string.");
+            logger.error(urlStr + ": Error converting body byte array to string.");
             logger.debug(e);
         } catch (IOException e) {
-            logger.error("Error fetching document at url: " + urlStr);
+            logger.error(urlStr + ": Error fetching document");
             logger.error(e);
         } finally {
             if (responseStream != null) {
