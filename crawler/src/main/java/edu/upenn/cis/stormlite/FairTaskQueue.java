@@ -16,7 +16,7 @@ public class FairTaskQueue {
 
     Queue<ClassQueue<ITask>> fairTaskQueue = new ConcurrentLinkedQueue<ClassQueue<ITask>>();
     Map<String, ClassQueue<ITask>> fairTaskMap = new ConcurrentHashMap<String, ClassQueue<ITask>>();
-    int linkFilterRemaining = 5;
+    int linkFilterRemaining = 15;
 
     public class ClassQueue<T> extends ConcurrentLinkedQueue<T> {
 
@@ -40,7 +40,7 @@ public class FairTaskQueue {
         if (taskQueue.className.equals(LinkFilterBolt.class.getName())) {
             linkFilterRemaining--;
             if (linkFilterRemaining == 0) {
-                linkFilterRemaining = 5;
+                linkFilterRemaining = 15;
                 fairTaskQueue.poll();
                 fairTaskQueue.add(taskQueue);
             }
