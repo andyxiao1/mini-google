@@ -52,8 +52,6 @@ public class WebServer {
         
         System.out.println("Starting server on port: " + port);
         
-        
-        
         get("/", (request, response) -> "hello world");
         
         get("/hello", (request, response) -> "world");
