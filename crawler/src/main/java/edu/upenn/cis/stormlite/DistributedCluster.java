@@ -74,6 +74,8 @@ public class DistributedCluster implements Runnable {
 
 	FairTaskQueue fairTaskQueue = new FairTaskQueue();
 
+	int numThreads;
+
 	/**
 	 * Sets up the topology, instantiating objects (executors) on the local machine.
 	 * (Needs to be run on each worker in a distributed cluster.)
@@ -90,6 +92,7 @@ public class DistributedCluster implements Runnable {
 	public TopologyContext submitTopology(String name, Config config, Topology topo, int threads)
 			throws ClassNotFoundException {
 
+		numThreads = threads;
 		executor = Executors.newFixedThreadPool(threads);
 		theTopology = name;
 		context = new TopologyContext(topo, fairTaskQueue);
@@ -123,23 +126,28 @@ public class DistributedCluster implements Runnable {
 	 * The main executor loop uses Java's ExecutorService to schedule tasks.
 	 */
 	public void run() {
-		while (!quit.get()) {
-			Queue<ITask> taskQueue = fairTaskQueue.nextQueue();
+		for (int i = 0; i < numThreads; i++) {
+			executor.execute(() -> {
+				while (!quit.get()) {
+					Queue<ITask> taskQueue = fairTaskQueue.nextQueue();
 
-			if (taskQueue == null) {
-				log.error("Fair task queue empty");
-				Thread.yield();
-				continue;
-			}
+					if (taskQueue == null) {
+						log.error("Fair task queue empty");
+						Thread.yield();
+						continue;
+					}
 
-			ITask task = taskQueue.poll();
-			if (task == null) {
-				Thread.yield();
-				continue;
-			}
+					ITask task = taskQueue.poll();
+					if (task == null) {
+						Thread.yield();
+						continue;
+					}
 
-			// log.info("Task: " + task.toString());
-			executor.execute(task);
+					// log.info("Task: " + task.toString());
+					// executor.execute(task);
+					task.run();
+				}
+			});
 		}
 		executor.shutdown();
 	}
@@ -327,9 +335,10 @@ public class DistributedCluster implements Runnable {
 
 	public void awaitTermination() {
 		try {
-			executor.awaitTermination(10, TimeUnit.SECONDS);
+			executor.awaitTermination(60, TimeUnit.SECONDS);
 		} catch (InterruptedException e) {
-			e.printStackTrace();
+			log.error("Forced termination");
+			// e.printStackTrace();
 		}
 	}
 }

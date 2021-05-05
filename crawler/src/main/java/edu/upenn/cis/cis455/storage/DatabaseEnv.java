@@ -4,6 +4,7 @@ import java.io.File;
 import java.net.MalformedURLException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.sql.Timestamp;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -39,6 +40,11 @@ public class DatabaseEnv {
     PrimaryIndex<Long, CrawlQueue> crawlQueueById;
     SecondaryIndex<String, Long, CrawlQueue> crawlQueueByDomain;
     Set<String> currentlyProcessing;
+
+    Set<String> crawlQueueUrlCache;
+    Set<String> urlSeenCache;
+    int urlSeenCount; // Used to allow the first few hundred URLs to pass before caching.
+    boolean isFlushing;
 
     public DatabaseEnv(String directory) {
         logger.info("Initializing database environment for " + directory);
@@ -78,6 +84,11 @@ public class DatabaseEnv {
             crawlQueueByDomain = store.getSecondaryIndex(crawlQueueById, String.class, "domain");
             currentlyProcessing = new HashSet<String>();
 
+            crawlQueueUrlCache = new HashSet<String>();
+            urlSeenCache = new HashSet<String>();
+            urlSeenCount = 0;
+            isFlushing = false;
+
         } catch (DatabaseException dbe) {
             logger.error("Error opening environment and store");
             logger.error(dbe);
@@ -94,148 +105,188 @@ public class DatabaseEnv {
      * Removes from CQ, adds domain to `currentlyProcessing` set. Returns null if CQ
      * is empty.
      */
-    public synchronized String crawlQueueRemoveLeft() {
+    public String crawlQueueRemoveLeft() {
+        synchronized (StorageLocks.CRAWLER_LOCK) {
 
-        Transaction txn = env.beginTransaction(null, null);
-        if (isCrawlQueueEmpty()) {
-            txn.abort();
-            return null;
+            if (isCrawlQueueEmpty()) {
+                return null;
+            }
+
+            Transaction txn = env.beginTransaction(null, null);
+
+            CrawlQueue queue = crawlQueueById.get(CrawlQueue.frontId);
+            crawlQueueById.delete(CrawlQueue.frontId);
+            queue.removeFromFront(); // Id now out of valid range.
+
+            String domain = queue.domain;
+
+            if (currentlyProcessing.contains(domain)) {
+                txn.abort();
+                throw new IllegalStateException("Removing domain already in processing set");
+            }
+
+            currentlyProcessing.add(domain);
+            txn.commit();
+
+            logger.debug("Removed from crawl queue: " + queue.domain);
+            return queue.domain;
         }
-
-        CrawlQueue queue = crawlQueueById.get(CrawlQueue.frontId);
-        crawlQueueById.delete(CrawlQueue.frontId);
-        queue.removeFromFront(); // Id now out of valid range.
-
-        String domain = queue.domain;
-
-        if (currentlyProcessing.contains(domain)) {
-            txn.abort();
-            throw new IllegalStateException("Removing domain already in processing set");
-        }
-
-        currentlyProcessing.add(domain);
-        txn.commit();
-
-        logger.debug("Removed from crawl queue: " + queue.domain);
-        return queue.domain;
     }
 
     /**
      * Remove domain from processing if necessary. Adds domain to head of CQ if it
      * is non-empty.
      */
-    public synchronized void crawlQueueAddLeft(String domain) {
-        crawlQueueAdd(domain, true);
+    public void crawlQueueAddLeft(String domain) {
+        synchronized (StorageLocks.CRAWLER_LOCK) {
+
+            crawlQueueAdd(domain, true);
+        }
     }
 
     /**
      * Remove domain from processing if necessary. Adds domain to end of CQ if it is
      * non-empty.
      */
-    public synchronized void crawlQueueAddRight(String domain) {
-        crawlQueueAdd(domain, false);
+    public void crawlQueueAddRight(String domain) {
+        synchronized (StorageLocks.CRAWLER_LOCK) {
+            crawlQueueAdd(domain, false);
+        }
     }
 
-    private synchronized void crawlQueueAdd(String domain, boolean addToFront) {
-        Transaction txn = env.beginTransaction(null, null);
+    private void crawlQueueAdd(String domain, boolean addToFront) {
+        synchronized (StorageLocks.CRAWLER_LOCK) {
 
-        if (!currentlyProcessing.contains(domain)) {
-            txn.abort();
-            logger.error("Trying to add domain when it isn't in currently processing");
+            Transaction txn = env.beginTransaction(null, null);
+
+            if (!currentlyProcessing.contains(domain)) {
+                txn.abort();
+                logger.error("Trying to add domain when it isn't in currently processing");
+            }
+
+            currentlyProcessing.remove(domain);
+            if (crawlQueueByDomain.contains(domain)) {
+                txn.abort();
+                throw new IllegalStateException("Trying to add domain already in queue");
+            }
+
+            if (!domainQueueByDomain.get(domain).urls.isEmpty()) {
+                CrawlQueue queue = new CrawlQueue(domain, addToFront);
+                crawlQueueById.put(queue);
+            }
+
+            txn.commit();
+            logger.debug("Added to crawl queue: " + domain);
         }
-
-        currentlyProcessing.remove(domain);
-        if (crawlQueueByDomain.contains(domain)) {
-            txn.abort();
-            throw new IllegalStateException("Trying to add domain already in queue");
-        }
-
-        if (!domainQueueByDomain.get(domain).urls.isEmpty()) {
-            CrawlQueue queue = new CrawlQueue(domain, addToFront);
-            crawlQueueById.put(queue);
-        }
-
-        txn.commit();
-        logger.debug("Added to crawl queue: " + domain);
     }
 
-    public synchronized boolean isCrawlQueueEmpty() {
-        return CrawlQueue.isEmpty();
+    public boolean isCrawlQueueEmpty() {
+        synchronized (StorageLocks.CRAWLER_LOCK) {
+
+            return CrawlQueue.isEmpty();
+        }
     }
 
     /**
      * Add a new url to the Crawler Queue. Adds to DQ, and creates CQ instance if
      * the domain doesn't exist in CQ or `currentlyProcessing`.
      */
-    public synchronized void addUrl(String url) {
+    public void addUrlToCrawlQueue(String urlStr) {
+        synchronized (StorageLocks.CRAWLER_CACHE_LOCK) {
+            if (!urlStr.equals("noop")) {
+                crawlQueueUrlCache.add(urlStr);
+            }
 
-        Transaction txn = env.beginTransaction(null, null);
+            if (crawlQueueUrlCache.size() < 1000 && urlSeenCount > 50 && !isFlushing) {
+                logger.debug("Added url to crawl queue cache: " + urlStr);
+                return;
+            }
 
-        String domain = null;
-        try {
-            domain = (new URLInfo(url)).getBaseUrl();
-        } catch (MalformedURLException e) {
-            txn.abort();
-            logger.info("Trying to add malformed url: " + url);
-            return;
+            synchronized (StorageLocks.CRAWLER_LOCK) {
+
+                long start = System.currentTimeMillis();
+                logger.info("Starting crawl queue batch job at " + new Timestamp(System.currentTimeMillis()));
+
+                Transaction txn = env.beginTransaction(null, null);
+
+                for (String url : crawlQueueUrlCache) {
+                    String domain = null;
+                    try {
+                        domain = (new URLInfo(url)).getBaseUrl();
+                    } catch (MalformedURLException e) {
+                        // txn.abort();
+                        logger.error("Trying to add malformed url: " + url);
+                        continue;
+                    }
+
+                    // Add to domain queue.
+                    DomainQueue domainQueue = domainQueueByDomain.get(domain);
+                    if (domainQueue == null) {
+                        domainQueue = new DomainQueue(domain);
+                    }
+                    domainQueue.urls.add(url);
+                    domainQueueByDomain.put(domainQueue);
+                    logger.debug("Added url to crawler queue: " + url);
+
+                    // Add to crawl queue if not in it already and not in `currentlyProcessing`.
+                    if (!crawlQueueByDomain.contains(domain) && !currentlyProcessing.contains(domain)) {
+                        CrawlQueue crawlQueue = new CrawlQueue(domain, false);
+                        crawlQueueById.put(crawlQueue);
+                    }
+                }
+
+                crawlQueueUrlCache.clear();
+                txn.commit();
+                logger.info("Ending crawl queue batch job at " + new Timestamp(System.currentTimeMillis()));
+                double time = (System.currentTimeMillis() - start) / (double) 1000;
+                logger.info("CRAWL QUEUE BATCH JOB TIME: " + time);
+            }
         }
-
-        // Add to domain queue.
-        DomainQueue domainQueue = domainQueueByDomain.get(domain);
-        if (domainQueue == null) {
-            domainQueue = new DomainQueue(domain);
-        }
-        domainQueue.urls.add(url);
-        domainQueueByDomain.put(domainQueue);
-
-        // Add to crawl queue if not in it already and not in `currentlyProcessing`.
-        if (!crawlQueueByDomain.contains(domain) && !currentlyProcessing.contains(domain)) {
-            CrawlQueue crawlQueue = new CrawlQueue(domain, false);
-            crawlQueueById.put(crawlQueue);
-        }
-
-        txn.commit();
-        logger.debug("Added url to crawler queue: " + url);
     }
 
     /**
      * Returns the next url to parse from the specified Domain Queue.
      */
-    public synchronized String removeUrl(String domain) {
+    public String removeUrl(String domain) {
+        synchronized (StorageLocks.CRAWLER_LOCK) {
 
-        Transaction txn = env.beginTransaction(null, null);
+            Transaction txn = env.beginTransaction(null, null);
 
-        if (!domainQueueByDomain.contains(domain)) {
-            txn.abort();
-            throw new IllegalStateException("Domain not in Domain Queue");
+            if (!domainQueueByDomain.contains(domain)) {
+                txn.abort();
+                throw new IllegalStateException("Domain not in Domain Queue");
+            }
+
+            DomainQueue domainQueue = domainQueueByDomain.get(domain);
+
+            if (domainQueue.urls.isEmpty()) {
+                txn.abort();
+                throw new IllegalStateException("Domain Queue empty");
+            }
+
+            String nextUrl = domainQueue.urls.remove();
+            domainQueueByDomain.put(domainQueue);
+            txn.commit();
+
+            logger.debug("Removed url from domain queue: " + nextUrl);
+            return nextUrl;
         }
-
-        DomainQueue domainQueue = domainQueueByDomain.get(domain);
-
-        if (domainQueue.urls.isEmpty()) {
-            txn.abort();
-            throw new IllegalStateException("Domain Queue empty");
-        }
-
-        String nextUrl = domainQueue.urls.remove();
-        domainQueueByDomain.put(domainQueue);
-        txn.commit();
-
-        logger.debug("Removed url from domain queue: " + nextUrl);
-        return nextUrl;
     }
 
-    public synchronized void initializeCrawlQueue() {
-        EntityCursor<CrawlQueue> queues = crawlQueueById.entities();
+    public void initializeCrawlQueue() {
+        synchronized (StorageLocks.CRAWLER_LOCK) {
+            EntityCursor<CrawlQueue> queues = crawlQueueById.entities();
 
-        // Only reset the front and back ids if the queue isn't empty.
-        if (queues.next() == null) {
-            return;
+            // Only reset the front and back ids if the queue isn't empty.
+            if (queues.next() == null) {
+                queues.close();
+                return;
+            }
+
+            CrawlQueue.frontId = queues.next().id;
+            CrawlQueue.endId = queues.last().id;
+            queues.close();
         }
-
-        CrawlQueue.frontId = queues.next().id;
-        CrawlQueue.endId = queues.last().id;
-        queues.close();
     }
 
     ///////////////////////////////////////////////////
@@ -283,23 +334,52 @@ public class DatabaseEnv {
     // Url Seen Methods
     ///////////////////////////////////////////////////
 
-    public synchronized void addUrlSeen(String url) {
+    public void addUrlSeen(String urlStr) {
 
-        Transaction txn = env.beginTransaction(null, null);
-        if (containsUrl(url)) {
-            txn.abort();
-            throw new IllegalArgumentException("Url already exists in database.");
+        synchronized (StorageLocks.URL_SEEN_CACHE_LOCK) {
+            if (!urlStr.equals("noop")) {
+                urlSeenCache.add(urlStr);
+            }
+
+            if (urlSeenCache.size() < 1000 && urlSeenCount > 50 && !isFlushing) {
+                urlSeenCount++;
+                logger.debug("Added url to url seen cache: " + urlStr);
+                return;
+            }
+
+            synchronized (StorageLocks.URL_SEEN_LOCK) {
+
+                long start = System.currentTimeMillis();
+                logger.info("Starting url seen batch job at " + new Timestamp(System.currentTimeMillis()));
+
+                Transaction txn = env.beginTransaction(null, null);
+
+                for (String url : urlSeenCache) {
+                    if (urlSeenByUrl.contains(url)) {
+                        // txn.abort();
+                        // throw new IllegalArgumentException("Url already exists in database.");
+                        logger.error("Url already exists in database.");
+                        continue;
+                    }
+
+                    UrlSeen urlSeen = new UrlSeen(url);
+                    urlSeenByUrl.put(urlSeen);
+                    logger.debug("Added url to url seen: " + url);
+                }
+
+                urlSeenCache.clear();
+                txn.commit();
+                logger.info("Ending url seen batch job at " + new Timestamp(System.currentTimeMillis()));
+                double time = (System.currentTimeMillis() - start) / (double) 1000;
+                logger.info("URL SEEN BATCH JOB TIME: " + time);
+            }
         }
-
-        UrlSeen urlSeen = new UrlSeen(url);
-        urlSeenByUrl.put(urlSeen);
-        txn.commit();
-
-        logger.debug("Added url to url seen: " + url);
     }
 
-    public synchronized boolean containsUrl(String url) {
-        return urlSeenByUrl.contains(url);
+    public boolean containsUrl(String url) {
+        synchronized (StorageLocks.URL_SEEN_LOCK) {
+            return urlSeenCache.contains(url) || urlSeenByUrl.contains(url);
+        }
     }
 
     ///////////////////////////////////////////////////
@@ -357,6 +437,11 @@ public class DatabaseEnv {
         currentlyProcessing.clear();
         txn.commit();
         logger.info("flushed out currently processing to crawl queue");
+    }
+
+    public synchronized void flushUrlCaches() {
+        addUrlSeen("noop");
+        addUrlToCrawlQueue("noop");
     }
 
     public synchronized void close() {
