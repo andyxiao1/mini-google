@@ -17,3 +17,4 @@ Configuration:
       level: error
       AppenderRef:
         ref: Console
+        ref: File

@@ -159,6 +159,7 @@ public class DistributedCluster implements Runnable {
 		for (String key : spoutStreams.keySet())
 			for (IRichSpout spout : spoutStreams.get(key)) {
 				String className = spout.getClass().getName();
+				// Need this so SpoutTask can add itself back onto the queue.
 				Queue<ITask> taskQueue = fairTaskQueue.getQueue(className);
 				fairTaskQueue.addTask(className, new SpoutTask(spout, taskQueue));
 			}
