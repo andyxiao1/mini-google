@@ -179,7 +179,10 @@ public class UrlSpout implements IRichSpout {
     }
 
     private boolean isValidUrl(String link) {
-        if (link.contains("wikipedia") && !link.contains("en.wikipedia")) {
+        if (link.contains("wiki") && !link.contains("en.wikipedia")) {
+            return false;
+        }
+        if (link.contains("wordpress")) {
             return false;
         }
 
