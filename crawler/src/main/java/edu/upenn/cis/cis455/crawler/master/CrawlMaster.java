@@ -44,14 +44,23 @@ public class CrawlMaster {
     AtomicBoolean isRunning = new AtomicBoolean(true);
     long crawlStartTime = -1;
     long crawlTotal = 0;
+    String environment;
+    String awsDocumentsFolder;
+    String awsUrlMapFolder;
+    String documentsTableName;
 
-    public CrawlMaster(int port, String seedUrlFile, Integer maxSize, Integer threadCount) {
+    public CrawlMaster(int port, String seedUrlFile, Integer maxSize, Integer threadCount, String env,
+            String documentFolder, String urlMapFolder, String docTableName) {
         log.info("Crawl master node startup, on port " + port);
 
         port(port);
         maxDocSize = maxSize;
         crawlThreads = threadCount;
         seedUrls = UrlReader.readSeedUrls(seedUrlFile);
+        environment = env;
+        awsDocumentsFolder = documentFolder;
+        awsUrlMapFolder = urlMapFolder;
+        documentsTableName = docTableName;
 
         defineHomeRoute();
         defineStartCrawlRoute();
@@ -82,6 +91,10 @@ public class CrawlMaster {
             config.put(MAX_DOCUMENT_SIZE, maxDocSize.toString());
             config.put(THREAD_COUNT, crawlThreads.toString());
             config.put(WORKER_LIST, getWorkerList());
+            config.put(ENVIRONMENT, environment);
+            config.put(AWS_DOCUMENTS_FOLDER, awsDocumentsFolder);
+            config.put(AWS_URLMAP_FOLDER, awsUrlMapFolder);
+            config.put(DOCUMENTS_TABLE_NAME, documentsTableName);
             WorkerJob job = new WorkerJob(setupTopology(), config);
 
             // Send job to workers.
@@ -260,9 +273,9 @@ public class CrawlMaster {
         org.apache.logging.log4j.core.config.Configurator.setLevel("edu.upenn", Level.INFO);
 
         // Process arguments.
-        if (args.length != 4) {
+        if (args.length != 7) {
             System.out.println(
-                    "Usage: CrawlMaster {port number} {seed url file} {max doc size in MB} {number of threads per worker}");
+                    "Usage: CrawlMaster {port number} {seed url file} {max doc size in MB} {number of threads per worker} {`LOCAL` or `AWS` environment} {AWS documents folder} {AWS urlmap folder} {documents table name}");
             System.exit(1);
         }
 
@@ -271,7 +284,18 @@ public class CrawlMaster {
         Integer maxDocSize = Integer.valueOf(args[2]);
         Integer crawlThreads = Integer.valueOf(args[3]);
 
+        String environment = args[4];
+        String awsDocumentsFolder = args[5];
+        String awsUrlMapFolder = args[6];
+        String documentsTableName = args[7];
+
+        if (!environment.equals(LOCAL) && !environment.equals(AWS)) {
+            log.error("Invalid environment.");
+            System.exit(1);
+        }
+
         // Start CrawlMaster server.
-        new CrawlMaster(port, seedUrlFile, maxDocSize, crawlThreads);
+        new CrawlMaster(port, seedUrlFile, maxDocSize, crawlThreads, environment, awsDocumentsFolder, awsUrlMapFolder,
+                documentsTableName);
     }
 }

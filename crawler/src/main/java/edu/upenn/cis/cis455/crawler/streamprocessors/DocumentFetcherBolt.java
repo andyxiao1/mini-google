@@ -56,6 +56,8 @@ public class DocumentFetcherBolt implements IRichBolt {
      */
     int maxDocumentSize;
 
+    String environment;
+
     @Override
     public String getExecutorId() {
         return executorId;
@@ -72,7 +74,7 @@ public class DocumentFetcherBolt implements IRichBolt {
         database = StorageFactory.getDatabaseInstance(config.get(DATABASE_DIRECTORY));
         maxDocumentSize = Integer.parseInt(config.get(MAX_DOCUMENT_SIZE)) * MEGABYTE_BYTES;
         awsEnv = AWSFactory.getDatabaseInstance();
-
+        environment = config.get(ENVIRONMENT);
     }
 
     @Override
@@ -114,9 +116,12 @@ public class DocumentFetcherBolt implements IRichBolt {
         logger.info(url + ": storing document in aws");
         String contentType = responseHeaders.get(CONTENT_TYPE_HEADER);
 
-        // NOTE: One of the add document functions should always be commented out.
-        // database.addDocument(url, content, contentType);
-        awsEnv.putDocument(url, content, executorId);
+        // Check where we should store document
+        if (environment.equals(LOCAL)) {
+            database.addDocument(url, content, contentType);
+        } else if (environment.equals(AWS)) {
+            awsEnv.putDocument(url, content, executorId);
+        }
         CrawlerState.count.incrementAndGet();
 
         logger.debug(getExecutorId() + " emitting content for " + url);

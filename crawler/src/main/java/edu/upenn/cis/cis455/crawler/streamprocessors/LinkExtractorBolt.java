@@ -53,6 +53,7 @@ public class LinkExtractorBolt implements IRichBolt {
      */
     DatabaseEnv database;
     AWSInstance awsEnv;
+    String environment;
 
     @Override
     public String getExecutorId() {
@@ -69,7 +70,7 @@ public class LinkExtractorBolt implements IRichBolt {
         collector = coll;
         database = StorageFactory.getDatabaseInstance(config.get(DATABASE_DIRECTORY));
         awsEnv = AWSFactory.getDatabaseInstance();
-
+        environment = config.get(ENVIRONMENT);
     }
 
     @Override
@@ -101,8 +102,11 @@ public class LinkExtractorBolt implements IRichBolt {
             } catch (MalformedURLException e) {
                 continue;
             }
-            // Note: Comment this line out if we are testing locally.
-            awsEnv.addUrl(url, domain);
+
+            if (environment.equals(AWS)) {
+                awsEnv.addUrl(url, domain);
+            }
+
             collector.emit(new Values<Object>(domain, linkHref), getExecutorId());
         }
         logger.debug(url + ": parse end, total links emitted=" + links.size());
