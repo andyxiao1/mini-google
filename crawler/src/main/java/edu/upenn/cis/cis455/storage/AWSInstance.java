@@ -52,9 +52,13 @@ import com.amazonaws.services.s3.model.GetObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.S3Object;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import edu.upenn.cis.cis455.crawler.utils.Security;
 
 public class AWSInstance {
+    static final Logger logger = LogManager.getLogger(AWSInstance.class);
 
     static AmazonDynamoDB dynamoDB;
     private String tableName;
@@ -192,7 +196,7 @@ public class AWSInstance {
     public void close() {
         sendURLStoS3();
         createFileInS3(docname, currentS3Document);
-
+        logger.info("AWS closed.");
     }
 
     private void sendURLStoS3() {

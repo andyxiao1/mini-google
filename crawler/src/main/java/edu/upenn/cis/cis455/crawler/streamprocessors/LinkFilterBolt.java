@@ -66,6 +66,11 @@ public class LinkFilterBolt implements IRichBolt {
             return true;
         }
 
+        if (!isValidUrl(url)) {
+            logger.debug(url + ": doesn't pass url filter");
+            return true;
+        }
+
         database.addUrlSeen(url);
         database.addUrlToCrawlQueue(url);
         logger.debug(url + ": added to queue");
@@ -83,5 +88,13 @@ public class LinkFilterBolt implements IRichBolt {
     @Override
     public Fields getSchema() {
         return schema;
+    }
+
+    private boolean isValidUrl(String link) {
+        if (link.contains("wikipedia") && !link.contains("en.wikipedia")) {
+            return false;
+        }
+
+        return true;
     }
 }

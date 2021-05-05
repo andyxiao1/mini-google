@@ -327,7 +327,7 @@ public class DistributedCluster implements Runnable {
 		closeSpoutInstances();
 		closeBoltInstances();
 
-		System.out.println("Shutting down distributed cluster.");
+		log.info("Shutting down distributed cluster.");
 	}
 
 	public StreamRouter getStreamRouter(String stream) {
