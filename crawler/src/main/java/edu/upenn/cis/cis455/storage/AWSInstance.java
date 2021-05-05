@@ -59,12 +59,12 @@ public class AWSInstance {
     static AmazonDynamoDB dynamoDB;
     private String tableName;
     private String bucketName;
-    private int docIndex;
     private final int max_doc_size = 100000000;
     String currentS3Document = "";
     private Map<String, Set<String>> urlToDests = new HashMap<String, Set<String>>();
-    private String filePath;
     private String docname;
+    private String awsDocumentsFolder;
+    private String awsUrlMapFolder;
 
     static AmazonS3 s3;
 
@@ -87,13 +87,21 @@ public class AWSInstance {
         s3 = AmazonS3ClientBuilder.standard().withCredentials(credentialsProvider).withRegion("us-east-1").build();
 
         bucketName = "555finalproject";
-        filePath = "url_mappings.csv";
+        // filePath = "url_mappings.csv";
         dynamoDB = AmazonDynamoDBClientBuilder.standard().withCredentials(credentialsProvider).withRegion("us-east-1")
                 .build();
         docname = UUID.randomUUID().toString();
 
+        // Set defaults.
         tableName = "documents";
+        awsDocumentsFolder = "documents";
+        awsUrlMapFolder = "urlmap";
+    }
 
+    public void setConfig(String documentsFolder, String urlMapFolder, String documentsTableName) {
+        tableName = documentsTableName;
+        awsDocumentsFolder = documentsFolder;
+        awsUrlMapFolder = urlMapFolder;
     }
 
     public synchronized String getDocument(String url) {
@@ -117,13 +125,13 @@ public class AWSInstance {
             content = object.getObjectContent().readAllBytes();
             return (new String(content, "UTF-8").substring(startIdx, endIdx));
         } catch (IOException e) {
-            // TODO Auto-generated catch block
             e.printStackTrace();
         }
         return "ERROR";
     }
 
-    public synchronized String putDocument(String url, String content, String executorId) {
+    public synchronized String putDocument(String url, String content, int numLinks, String requestTime, String domain,
+            String docExcerpt, String title) {
 
         String id = Security.md5Hash(url);
         String contentHash = "" + content.hashCode();
@@ -140,6 +148,12 @@ public class AWSInstance {
         item.put("docname", new AttributeValue(docname));
         item.put("startIdx", new AttributeValue().withN(Integer.toString(startIdx)));
         item.put("endIdx", new AttributeValue().withN(Integer.toString(endIdx)));
+        item.put("length", new AttributeValue().withN(Integer.toString(endIdx - startIdx)));
+        item.put("numLinks", new AttributeValue().withN(Integer.toString(numLinks)));
+        item.put("requestTime", new AttributeValue().withN(requestTime));
+        item.put("domain", new AttributeValue(domain));
+        item.put("docExcerpt", new AttributeValue(docExcerpt));
+        item.put("title", new AttributeValue(title));
 
         // System.out.println("num byteS: " + currentS3Document.getBytes().length);
         if (currentS3Document.getBytes().length > max_doc_size) {
@@ -167,10 +181,9 @@ public class AWSInstance {
     public void createFileInS3(String hashedUrl, String contents) {
 
         try {
-            s3.putObject(new PutObjectRequest(bucketName + "/documents", hashedUrl + ".txt",
+            s3.putObject(new PutObjectRequest(bucketName + "/" + awsDocumentsFolder, hashedUrl + ".txt",
                     createFile(hashedUrl, contents, ".txt")));
         } catch (IOException e) {
-            // TODO Auto-generated catch block
             e.printStackTrace();
         }
 
@@ -184,7 +197,7 @@ public class AWSInstance {
 
     private void sendURLStoS3() {
         File f = createCSV(docname);
-        s3.putObject(new PutObjectRequest(bucketName + "/urlmap", docname + ".csv", f));
+        s3.putObject(new PutObjectRequest(bucketName + "/" + awsUrlMapFolder, docname + ".csv", f));
 
     }
 
@@ -220,7 +233,6 @@ public class AWSInstance {
             csvWriter.close();
 
         } catch (IOException e) {
-            // TODO Auto-generated catch block
             e.printStackTrace();
         }
 
@@ -287,8 +299,7 @@ public class AWSInstance {
          * PutObjectRequest("555finalproject" + "/urlmap", "test2.csv", f));
          *
          *
-         * } catch (IOException e) { // TODO Auto-generated catch block
-         * e.printStackTrace(); }
+         * } catch (IOException e) { e.printStackTrace(); }
          *
          *
          *

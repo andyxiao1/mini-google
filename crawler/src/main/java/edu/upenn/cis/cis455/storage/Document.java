@@ -18,17 +18,14 @@ public class Document {
 
     public String content;
 
-    public String contentType;
-
     public long lastFetchedDate;
 
     private Document() {
     } // For bindings
 
-    public Document(String documentUrl, String documentContent, String type) {
+    public Document(String documentUrl, String documentContent) {
         url = documentUrl;
         content = documentContent;
-        contentType = type;
         updateLastFetchedDate();
     }
 

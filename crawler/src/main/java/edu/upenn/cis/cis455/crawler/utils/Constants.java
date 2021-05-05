@@ -1,9 +1,5 @@
 package edu.upenn.cis.cis455.crawler.utils;
 
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
-
 public final class Constants {
 
     private Constants() {
@@ -22,7 +18,13 @@ public final class Constants {
     public static final String WORKER_INDEX = "workerIndex";
     public static final String THREAD_COUNT = "THREAD_COUNT";
     public static final String WORKER_LIST = "workerList";
-    public static final String START_URL = "START_URL";
+    public static final String ENVIRONMENT = "ENVIRONMENT";
+    public static final String AWS_DOCUMENTS_FOLDER = "AWS_DOCUMENTS_FOLDER";
+    public static final String AWS_URLMAP_FOLDER = "AWS_URLMAP_FOLDER";
+    public static final String DOCUMENTS_TABLE_NAME = "DOCUMENTS_TABLE_NAME";
+
+    public static final String LOCAL = "LOCAL";
+    public static final String AWS = "AWS";
 
     public static final int MEGABYTE_BYTES = 1000000; // 1e6 bytes = 1 mb
 
@@ -38,7 +40,4 @@ public final class Constants {
     public static final String CONTENT_LENGTH_HEADER = "Content-Length";
 
     public static final String HTML_CONTENT_TYPE = "text/html";
-
-    public static final String[] VALID_FILE_TYPES = new String[] { "text/html", "text/xml", "application/xml" };
-    public static final Set<String> VALID_FILE_TYPES_SET = new HashSet<String>(Arrays.asList(VALID_FILE_TYPES));
 }

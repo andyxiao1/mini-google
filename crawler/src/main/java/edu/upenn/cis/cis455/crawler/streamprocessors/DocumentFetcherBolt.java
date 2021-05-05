@@ -6,11 +6,8 @@ import java.util.UUID;
 
 import static edu.upenn.cis.cis455.crawler.utils.Constants.*;
 
-import edu.upenn.cis.cis455.crawler.utils.CrawlerState;
 import edu.upenn.cis.cis455.crawler.utils.HTTP;
 import edu.upenn.cis.cis455.crawler.utils.Security;
-import edu.upenn.cis.cis455.storage.AWSFactory;
-import edu.upenn.cis.cis455.storage.AWSInstance;
 import edu.upenn.cis.cis455.storage.DatabaseEnv;
 import edu.upenn.cis.cis455.storage.StorageFactory;
 import edu.upenn.cis.stormlite.OutputFieldsDeclarer;
@@ -33,7 +30,7 @@ public class DocumentFetcherBolt implements IRichBolt {
      * The `DocumentFetcherBolt` fetches the document for a url and returns it as a
      * String.
      */
-    Fields schema = new Fields("domain", "url", "document", "contentType");
+    Fields schema = new Fields("domain", "url", "document", "requestTime");
 
     /**
      * To make it easier to debug: we have a unique ID for each instance.
@@ -49,12 +46,13 @@ public class DocumentFetcherBolt implements IRichBolt {
      * Interface for database methods.
      */
     DatabaseEnv database;
-    AWSInstance awsEnv;
 
     /**
      * Max document size.
      */
     int maxDocumentSize;
+
+    String environment;
 
     @Override
     public String getExecutorId() {
@@ -71,8 +69,6 @@ public class DocumentFetcherBolt implements IRichBolt {
         collector = coll;
         database = StorageFactory.getDatabaseInstance(config.get(DATABASE_DIRECTORY));
         maxDocumentSize = Integer.parseInt(config.get(MAX_DOCUMENT_SIZE)) * MEGABYTE_BYTES;
-        awsEnv = AWSFactory.getDatabaseInstance();
-
     }
 
     @Override
@@ -94,8 +90,10 @@ public class DocumentFetcherBolt implements IRichBolt {
         }
         logger.debug(url + ": validated");
 
-        logger.info(url + ": downloading");
-        String content = HTTP.makeRequest(url, GET_REQUEST, maxDocumentSize, null);
+        logger.debug(url + ": downloading");
+
+        String content = HTTP.makeRequest(url, GET_REQUEST, maxDocumentSize, responseHeaders);
+        String requestTime = responseHeaders.get("Request-Time");
 
         if (content == null) {
             logger.error(url + ": error fetching document");
@@ -105,22 +103,13 @@ public class DocumentFetcherBolt implements IRichBolt {
         // Content-seen filter.
         String hash = Security.md5Hash(content);
         if (database.containsHashContent(hash)) {
-            logger.info(url + ": content seen before");
+            logger.debug(url + ": content seen before");
             return true;
         }
         database.addContentSeen(hash);
 
-        // Store document in database.
-        logger.info(url + ": storing document in aws");
-        String contentType = responseHeaders.get(CONTENT_TYPE_HEADER);
-
-        // NOTE: One of the add document functions should always be commented out.
-        // database.addDocument(url, content, contentType);
-        awsEnv.putDocument(url, content, executorId);
-        CrawlerState.count.incrementAndGet();
-
         logger.debug(getExecutorId() + " emitting content for " + url);
-        collector.emit(new Values<Object>(domain, url, content, contentType), getExecutorId());
+        collector.emit(new Values<Object>(domain, url, content, requestTime), getExecutorId());
         return true;
     }
 
@@ -158,7 +147,7 @@ public class DocumentFetcherBolt implements IRichBolt {
         // requests.
         String contentType = responseHeaders.get(CONTENT_TYPE_HEADER);
 
-        if (contentType == null || !VALID_FILE_TYPES_SET.contains(contentType) && !contentType.endsWith("+xml")) {
+        if (contentType == null || !contentType.equals(HTML_CONTENT_TYPE)) {
             logger.debug(url + ": invalid file type");
             return false;
         }

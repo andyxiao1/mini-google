@@ -22,6 +22,7 @@ public class HTTP {
             Map<String, String> responseHeaders) {
 
         logger.debug("Making request at " + new Timestamp(System.currentTimeMillis()));
+        long start = System.currentTimeMillis();
 
         HttpURLConnection connection = null;
         InputStream responseStream = null;
@@ -75,6 +76,10 @@ public class HTTP {
                 if (lastModified != null) {
                     responseHeaders.put("Last-Modified", lastModified.trim());
                 }
+
+                long end = System.currentTimeMillis();
+                double requestTime = ((double) end) / start / 1000;
+                responseHeaders.put("Request-Time", Double.toString(requestTime));
             }
 
             if (rlen > -1) {
@@ -86,13 +91,13 @@ public class HTTP {
             logger.error(urlStr + ": Timed Out at " + new Timestamp(System.currentTimeMillis()));
             logger.debug(e);
         } catch (MalformedURLException e) {
-            logger.debug("Malformed URL: " + urlStr);
+            logger.error(urlStr + ": Error Malformed URL");
             logger.debug(e);
         } catch (UnsupportedEncodingException e) {
-            logger.debug("Error converting body byte array to string.");
+            logger.error(urlStr + ": Error converting body byte array to string.");
             logger.debug(e);
         } catch (IOException e) {
-            logger.error("Error fetching document at url: " + urlStr);
+            logger.error(urlStr + ": Error fetching document");
             logger.error(e);
         } finally {
             if (responseStream != null) {

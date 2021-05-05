@@ -149,6 +149,7 @@ public class DistributedCluster implements Runnable {
 				}
 			});
 		}
+		executor.shutdown();
 	}
 
 	/**
@@ -312,12 +313,10 @@ public class DistributedCluster implements Runnable {
 	 * @param string
 	 */
 	public void killTopology(String string) {
-		executor.shutdown();
 		if (quit.getAndSet(true) == false) {
 			while (!quit.get())
 				Thread.yield();
 		}
-		awaitTermination();
 	}
 
 	/**

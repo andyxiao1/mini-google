@@ -15,6 +15,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import edu.upenn.cis.cis455.crawler.utils.CrawlerState;
 import edu.upenn.cis.cis455.crawler.utils.HTTP;
 import edu.upenn.cis.cis455.storage.AWSFactory;
+import edu.upenn.cis.cis455.storage.AWSInstance;
 import edu.upenn.cis.cis455.storage.DatabaseEnv;
 import edu.upenn.cis.cis455.storage.StorageFactory;
 import edu.upenn.cis.stormlite.Config;
@@ -34,6 +35,7 @@ public class CrawlWorker {
     DistributedCluster cluster;
     ObjectMapper om;
     DatabaseEnv database;
+    AWSInstance awsEnv;
     TopologyContext context;
     Thread workerStatusThread;
 
@@ -50,7 +52,7 @@ public class CrawlWorker {
         om.enableDefaultTyping(ObjectMapper.DefaultTyping.NON_FINAL);
 
         database = StorageFactory.getDatabaseInstance(storageDir);
-        // database.resetRun();
+        awsEnv = AWSFactory.getDatabaseInstance();
 
         port(port);
         defineInitCrawlRoute();
@@ -66,8 +68,12 @@ public class CrawlWorker {
             WorkerJob workerJob;
             try {
                 workerJob = om.readValue(request.body(), WorkerJob.class);
+
+                // Setup/Read config.
                 Config config = workerJob.getConfig();
                 config.put(DATABASE_DIRECTORY, storageDir);
+                awsEnv.setConfig(config.get(AWS_DOCUMENTS_FOLDER), config.get(AWS_URLMAP_FOLDER),
+                        config.get(DOCUMENTS_TABLE_NAME));
                 int crawlThreads = Integer.parseInt(config.get(THREAD_COUNT));
 
                 log.info("Processing init crawl request on machine " + config.get(WORKER_INDEX));
@@ -181,14 +187,15 @@ public class CrawlWorker {
     }
 
     private void shutdown() {
+        System.out.println(database);
+        System.out.println("Crawl Count: " + CrawlerState.count.get());
+
         CrawlerState.isShutdown.set(true);
         cluster.killTopology("");
         cluster.shutdown();
+        cluster.awaitTermination();
         stop();
-
-        System.out.println(database);
-        System.out.println("Crawl Count: " + CrawlerState.count.get());
-        AWSFactory.getDatabaseInstance().close();
+        awsEnv.close();
         database.close();
 
         try {

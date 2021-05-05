@@ -293,14 +293,14 @@ public class DatabaseEnv {
     // Document Methods
     ///////////////////////////////////////////////////
 
-    public synchronized void addDocument(String url, String documentContents, String contentType) {
+    public synchronized void addDocument(String url, String documentContents) {
 
         Transaction txn = env.beginTransaction(null, null);
         if (documentByUrl.contains(url)) {
             txn.abort();
             throw new IllegalArgumentException("Document already exists in database.");
         }
-        Document doc = new Document(url, documentContents, contentType);
+        Document doc = new Document(url, documentContents);
         documentById.put(doc);
         txn.commit();
 
