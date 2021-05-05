@@ -273,7 +273,7 @@ public class CrawlMaster {
         org.apache.logging.log4j.core.config.Configurator.setLevel("edu.upenn", Level.INFO);
 
         // Process arguments.
-        if (args.length != 7) {
+        if (args.length != 8) {
             System.out.println(
                     "Usage: CrawlMaster {port number} {seed url file} {max doc size in MB} {number of threads per worker} {`LOCAL` or `AWS` environment} {AWS documents folder} {AWS urlmap folder} {documents table name}");
             System.exit(1);
