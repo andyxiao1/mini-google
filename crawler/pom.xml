@@ -233,7 +233,11 @@
                         <argument>45555</argument>
                         <argument>seed-urls.txt</argument>
                         <argument>1</argument>
-                        <argument>10</argument>
+                        <argument>100</argument>
+                        <argument>LOCAL</argument>
+                        <argument>documents</argument>
+                        <argument>urlmap</argument>
+                        <argument>documents</argument>
                     </arguments>
                 </configuration>
             </plugin>
