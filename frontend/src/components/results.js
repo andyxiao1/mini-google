@@ -1,5 +1,6 @@
 import React from 'react';
 import { makeStyles } from '@material-ui/core/styles';
+import Loader from './Loader';
 import List from '@material-ui/core/List';
 import Container from '@material-ui/core/Container';
 import ListItem from '@material-ui/core/ListItem';
@@ -10,6 +11,8 @@ import Typography from '@material-ui/core/Typography';
 const useStyles = makeStyles(theme => ({
   container: {
     marginLeft: 180,
+    flex: 1,
+    display: 'flex',
   },
   list: {
     marginTop: theme.spacing(1),
@@ -18,37 +21,42 @@ const useStyles = makeStyles(theme => ({
     border: 20,
     borderRadius: 3,
     width: '100%',
-    // maxWidth: '200ch',
   },
-  inline: {
-    display: 'inline',
+  loader: {
+    marginTop: -theme.spacing(16),
+    zoom: 0.5,
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    transform: 'translate(-50%)',
   },
+  title: { color: '#42a9db' },
+  url: { color: '#0c942e' },
 }));
 
-const Results = ({ results }) => {
+const Results = ({ results, isLoading }) => {
   const classes = useStyles();
 
-  if (!results || results.length === 0) {
+  if (!isLoading && (!results || results.length === 0)) {
     return null;
   }
 
-  const resultslist = results.map(result => {
+  const resultslist = results.map((result, i) => {
     return (
-      <div>
+      <div key={i}>
         <ListItem alignItems="flex-start" button component="a" href={result.url}>
           <ListItemText
-            primary={result.title}
-            secondary={
-              <React.Fragment>
-                <Typography
-                  component="span"
-                  variant="body2"
-                  className={classes.inline}
-                  color="textPrimary"
-                ></Typography>
-                {result.text}
-              </React.Fragment>
+            primary={
+              <>
+                <Typography variant="h6" className={classes.title}>
+                  {result.title}
+                </Typography>
+                <Typography variant="subtitle1" className={classes.url}>
+                  {result.url}
+                </Typography>
+              </>
             }
+            secondary={result.text}
           />
         </ListItem>
         <Divider variant="fullWidth" component="li" />
@@ -58,7 +66,13 @@ const Results = ({ results }) => {
 
   return (
     <Container className={classes.container} maxWidth={'md'}>
-      <List className={classes.list}>{resultslist}</List>
+      {isLoading ? (
+        <div className={classes.loader}>
+          <Loader />
+        </div>
+      ) : (
+        <List className={classes.list}>{resultslist}</List>
+      )}
     </Container>
   );
 };

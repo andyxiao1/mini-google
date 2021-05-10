@@ -12,18 +12,29 @@ const darkTheme = createMuiTheme({
 
 const App = () => {
   const [results, setResults] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   const fetchSearchResults = async query => {
+    // REAL CODE
+    // setIsLoading(true);
     // const response = await fetch(`/search?q=${query}`);
     // const queryResults = await response.json();
-    const queryResults = RESULTS; // TODO: testing
-    setResults(queryResults);
+    // setResults(queryResults);
+    // setIsLoading(false);
+
+    // TESTING CODE
+    setIsLoading(true);
+    setTimeout(() => {
+      const queryResults = RESULTS;
+      setResults(queryResults);
+      setIsLoading(false);
+    }, 2000);
   };
 
   return (
     <ThemeProvider theme={darkTheme}>
-      <Search handleSearch={fetchSearchResults} isShowingResults={results.length > 0} />
-      <Results results={results} />
+      <Search handleSearch={fetchSearchResults} isShowingResults={results.length > 0 || isLoading} />
+      <Results results={results} isLoading={isLoading} />
     </ThemeProvider>
   );
 };
