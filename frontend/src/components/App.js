@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { createMuiTheme, ThemeProvider } from '@material-ui/core';
-import { Dashboard } from '../pages/Dashboard';
-import Table from './table';
-import { RESULTS } from './results';
+import Search from './Search';
+import Results from './Results';
+import { RESULTS } from '../constants/mockResults';
 
 const darkTheme = createMuiTheme({
   palette: {
@@ -10,11 +10,22 @@ const darkTheme = createMuiTheme({
   },
 });
 
-export default function App() {
+const App = () => {
+  const [results, setResults] = useState([]);
+
+  const fetchSearchResults = async query => {
+    // const response = await fetch(`/search?q=${query}`);
+    // const queryResults = await response.json();
+    const queryResults = RESULTS; // TODO: testing
+    setResults(queryResults);
+  };
+
   return (
     <ThemeProvider theme={darkTheme}>
-      <Dashboard />
-      <Table results={RESULTS} />
+      <Search handleSearch={fetchSearchResults} isShowingResults={results.length > 0} />
+      <Results results={results} />
     </ThemeProvider>
   );
-}
+};
+
+export default App;
