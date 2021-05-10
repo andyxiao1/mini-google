@@ -182,7 +182,7 @@ public class UrlSpout implements IRichSpout {
         if (link.contains("wiki") && !link.contains("en.wikipedia")) {
             return false;
         }
-        if (link.contains("wordpress")) {
+        if (link.contains("wordpress") || link.contains("stackexchange")) {
             return false;
         }
 
