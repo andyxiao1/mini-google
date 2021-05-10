@@ -49,14 +49,14 @@ const Results = ({ results, isLoading }) => {
             primary={
               <>
                 <Typography variant="h6" className={classes.title}>
-                  {result.title}
+                  {result.title.slice(0, 61)}
                 </Typography>
                 <Typography variant="subtitle1" className={classes.url}>
                   {result.url}
                 </Typography>
               </>
             }
-            secondary={result.text}
+            secondary={result.docExcerpt}
           />
         </ListItem>
         <Divider variant="fullWidth" component="li" />
