@@ -107,19 +107,19 @@ public class TestLemmas {
 		
 	}
 	
-	@Test
-	public void testStanfordPos() {
-       Sentence sent = new Sentence("Who is the best king in town? Obama? Grant?");
-//       int index = sent.algorithms().headOfSpan(new Span(0, sent.length()));  // Should return 1
-//       System.out.println(sent.lemma(index));
-       System.out.println(sent.nerTags());
-       
-       Sentence sent2 = new Sentence("What does the ostrich eat for breakfast?");
-       System.out.println(sent2.nerTags());
-       
-       // shows NER doesn't really help i dont think for the waste of time it may caus
-	}
-	
+//	@Test
+//	public void testStanfordPos() {
+//       Sentence sent = new Sentence("Who is the best king in town? Obama? Grant?");
+////       int index = sent.algorithms().headOfSpan(new Span(0, sent.length()));  // Should return 1
+////       System.out.println(sent.lemma(index));
+//       System.out.println(sent.nerTags());
+//       
+//       Sentence sent2 = new Sentence("What does the ostrich eat for breakfast?");
+//       System.out.println(sent2.nerTags());
+//       
+//       // shows NER doesn't really help i dont think for the waste of time it may caus
+//	}
+//	
 	
 	
 	

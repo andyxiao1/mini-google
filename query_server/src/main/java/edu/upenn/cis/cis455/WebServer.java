@@ -26,7 +26,7 @@ public class WebServer {
 	private static final Logger logger = LogManager.getLogger(WebServer.class);
 	
     public static void main(String[] args) {
-        org.apache.logging.log4j.core.config.Configurator.setLevel("edu.upenn.cis.cis455", Level.DEBUG);
+        org.apache.logging.log4j.core.config.Configurator.setLevel("edu.upenn.cis.cis455", Level.INFO);
         
         int port = Integer.parseInt(args[0]);
         
@@ -35,7 +35,6 @@ public class WebServer {
         String tableName = args[1];
         
         int maxLimitReturn = Integer.parseInt(args[2]);
-        
         
     	String pageRankTableName = args[3];
         
@@ -62,7 +61,7 @@ public class WebServer {
         
         System.out.println("Starting server on port: " + port);
         
-        logger.debug("Starting logger");
+//        logger.debug("Starting logger");
         
         get("/", (request, response) -> "hello world");
         
