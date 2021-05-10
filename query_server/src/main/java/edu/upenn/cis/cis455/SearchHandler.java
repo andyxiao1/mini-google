@@ -12,6 +12,7 @@ import spark.Route;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -31,6 +32,7 @@ import com.amazonaws.services.dynamodbv2.model.KeySchemaElement;
 import com.amazonaws.services.dynamodbv2.model.KeyType;
 import com.amazonaws.services.dynamodbv2.model.ProvisionedThroughput;
 import com.amazonaws.services.dynamodbv2.model.ScalarAttributeType;
+import com.sleepycat.json_simple.JsonArray;
 import com.amazonaws.services.dynamodbv2.document.Item;
 import com.amazonaws.services.dynamodbv2.document.ItemCollection;
 import com.amazonaws.services.dynamodbv2.document.QueryOutcome;
@@ -41,18 +43,39 @@ public class SearchHandler implements Route {
 	
 	private Table indexDb;
 	
+	private Table pageRankTable;
+	
+	private Table docTable;
+	
 	private int maxToQueryLimit;
 	
 	private int maxToShowLimit = 10;
 	
-	public SearchHandler(Table indexDb, int maxQueryLimit) {
+	public SearchHandler(Table indexDb, int maxQueryLimit, Table pageRankTable, Table docTable) {
 		this.indexDb = indexDb;
 		this.maxToQueryLimit = maxQueryLimit;
+		this.pageRankTable = pageRankTable;
+		this.docTable = docTable;
 	}
 	
-	public float computeScore(String search) {
-		// search for the term, get all the doc_ids and then return the combined value
-		return 0;
+	public double getPageRankScore(String doc_id) {
+		Item item = pageRankTable.getItem("doc_id", doc_id);
+		
+		if (item == null) {
+			return 0;
+		}
+		
+		System.out.println(item.get("rank"));
+		
+		BigDecimal pageScore = (BigDecimal) item.get("rank");
+		
+		return pageScore.doubleValue();
+	}
+	
+	public Item getDocumentItem(String doc_id) {
+		Item item = docTable.getItem("id", doc_id);
+		
+		return item;
 	}
 	
 	/**
@@ -66,10 +89,10 @@ public class SearchHandler implements Route {
 		// lets do a map from term -> c of that lemma
 		List<String> terms = preprocessWord(term);
 		
-		Map<String, Item> docIdToItem = new HashMap<String, Item>(); 
+		Map<String, ArrayList<Item>> docIdToItem = new HashMap<String, ArrayList<Item>>(); 
 		
 		// query items multiplied by idf
-		Map<String, Float> queryWeightMap = new HashMap<String, Float>();
+		Map<String, Double> queryWeightMap = new HashMap<String, Double>();
 		
 		for (int i = 0; i < terms.size(); i++) {
 			String t = terms.get(i);
@@ -81,7 +104,7 @@ public class SearchHandler implements Route {
 			        .withString(":v_term", t))
 			    .withScanIndexForward(false).withMaxResultSize(this.maxToQueryLimit);
 			
-			logger.info("Searching for " + term);
+			logger.debug("Searching for " + term);
 			
 			ItemCollection<QueryOutcome> items = index.query(spec);
 			
@@ -96,11 +119,12 @@ public class SearchHandler implements Route {
 					// Building Query Weight Map 
 					if (queryWeightMap.containsKey(t)) {
 						// add the idf to this
-						float weight = queryWeightMap.get(t);
+						double weight = queryWeightMap.get(t);
 						// like multiplying the actual query string by each words idf
 						queryWeightMap.put(t , weight + weight);
 					} else {
-						queryWeightMap.put(t , item.getFloat("idf"));
+						
+						queryWeightMap.put(t , item.getDouble("idf"));
 					}
 				}
 				
@@ -109,25 +133,74 @@ public class SearchHandler implements Route {
 				String jsonRep = item.toJSON();
 				
 				if (i == 0) {
-					docIdToItem.put(doc_id, item);
+					ArrayList<Item> arrList = new ArrayList<Item>();
+					arrList.add(item);
+					docIdToItem.put(doc_id, arrList);
 					// TODO: i think this is right
 				} else if (docIdToItem.containsKey(doc_id)) {
 					// only if its already in there do i put this in there
-					docIdToItem.put(doc_id, item);
+					docIdToItem.get(doc_id).add(item);
 				}
 				count++;
 			}
-			
-			// Final intersection of docIds 
-			Set docIdsSet = docIdToItem.keySet();
-			
-			// TODO: do the math here now that we have the set intersection docIds
-			
 		}
+		
+		String output = computeRanking(docIdToItem, queryWeightMap);
+		
+		
+		
 		
 		return prettyMap(docIdToItem);
 	}
 	
+	private String computeRanking(Map<String, ArrayList<Item>> docIdToItem, Map<String, Double> queryWeightMap) {
+		// Final intersection of docIds 
+		Set docIdsSet = docIdToItem.keySet();
+		
+		
+		// make a json array to send
+		JsonArray returnJson = new JsonArray();
+		
+		// go through every docId, and get the ranking
+		for (String docId : docIdToItem.keySet()) {
+			
+			ArrayList<Item> docToTerms = docIdToItem.get(docId);
+			
+			double itemScore = 0;
+			
+			// query weight dot product
+			for (Item queryItem : docToTerms) {
+				String queryTerm = (String) queryItem.get("term");
+				double qWeight = queryWeightMap.get(queryTerm);
+				itemScore += queryItem.getDouble("tfidf") * qWeight;
+			}
+			
+			// add pageRank
+			double pgScore = getPageRankScore(docId);
+			itemScore += pgScore;
+			
+			// add points if the terms show up in the title
+			Item documentItem = getDocumentItem(docId);
+			String title = documentItem.getString("title");
+	        StanfordLemmatizer slem = new StanfordLemmatizer();
+	        List<String> titleLemmas = slem.getLemmasList(title);
+	        
+	        int titleWeight = 10;
+	        
+	        
+	        for (String queryTerm : queryWeightMap.keySet()) {
+	        	if (titleLemmas.contains(queryTerm)) {
+	        		itemScore += titleWeight;
+	        	}
+	        }
+	        
+	        
+			
+		}
+		
+		return null;
+	}
+
 	public List<String> preprocessWord(String term) {
 		
 		// lemmatization
@@ -153,8 +226,6 @@ public class SearchHandler implements Route {
 		
 		logger.info("Sent query " + query);
 		
-//        GetItemSpec spec = new GetItemSpec().withPrimaryKey("term", query);
-        
         try {
         	// Step 1 get list of lemmas
         	List<String> terms = preprocessWord(query);
@@ -177,12 +248,14 @@ public class SearchHandler implements Route {
         }
 	}
 	
-	public String prettyMap(Map<String, Item> itemMap) {
+	public String prettyMap(Map<String, ArrayList<Item>> docIdToItem) {
 		StringBuilder sb = new StringBuilder();
 		
-		for (String key : itemMap.keySet()) {
+		for (String key : docIdToItem.keySet()) {
 			sb.append("Doc_id: " + key + "\n");
-			sb.append(itemMap.get(key).toJSONPretty() + "\n");
+			for (Item itm : docIdToItem.get(key)) {
+				sb.append(itm.toJSONPretty() + "\n");
+			}
 		}
 		
 		return sb.toString();

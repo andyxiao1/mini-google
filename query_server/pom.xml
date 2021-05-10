@@ -190,6 +190,8 @@
                         <argument>inverted_index_final</argument>
                         <!-- Max Query Size -->
                         <argument>1000</argument>
+                        <!-- Table Name for PageRank table -->
+                        <argument>PageRank_final_20_iterations</argument>
                     </arguments>
                 </configuration>
             </plugin>

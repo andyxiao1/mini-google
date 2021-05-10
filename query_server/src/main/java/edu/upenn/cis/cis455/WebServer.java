@@ -36,6 +36,9 @@ public class WebServer {
         
         int maxLimitReturn = Integer.parseInt(args[2]);
         
+        
+    	String pageRankTableName = args[3];
+        
         ProfileCredentialsProvider credentialsProvider = new ProfileCredentialsProvider();
         try {
             credentialsProvider.getCredentials();
@@ -52,13 +55,20 @@ public class WebServer {
         
         Table table = dynamoDB.getTable(tableName);
         
+        Table pageRankTable = dynamoDB.getTable(pageRankTableName);
+        
+        // DOCUMENT TABLE IS HARD CODED
+        Table docTable = dynamoDB.getTable("documents-final");
+        
         System.out.println("Starting server on port: " + port);
+        
+        logger.debug("Starting logger");
         
         get("/", (request, response) -> "hello world");
         
         get("/hello", (request, response) -> "world");
         
-        get("/search", new SearchHandler(table, maxLimitReturn));
+        get("/search", new SearchHandler(table, maxLimitReturn, pageRankTable, docTable));
         
         get("/shutdown", (request, response) -> {
         	stop();
