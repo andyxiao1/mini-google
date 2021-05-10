@@ -67,7 +67,7 @@ public class WebServer {
         
         get("/hello", (request, response) -> "world");
         
-        get("/search", new SearchHandler(table, maxLimitReturn, pageRankTable, docTable));
+        get("/search", new SearchHandler(table, maxLimitReturn, pageRankTable, docTable, dynamoDB));
         
         get("/shutdown", (request, response) -> {
         	stop();

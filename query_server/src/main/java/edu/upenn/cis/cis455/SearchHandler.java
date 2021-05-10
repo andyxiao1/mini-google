@@ -19,23 +19,28 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 
 import com.amazonaws.client.builder.AwsClientBuilder;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
+import com.amazonaws.services.dynamodbv2.document.BatchGetItemOutcome;
 import com.amazonaws.services.dynamodbv2.document.DynamoDB;
 import com.amazonaws.services.dynamodbv2.document.Index;
 import com.amazonaws.services.dynamodbv2.document.Table;
+import com.amazonaws.services.dynamodbv2.document.TableKeysAndAttributes;
 import com.amazonaws.services.dynamodbv2.document.spec.GetItemSpec;
 import com.amazonaws.services.dynamodbv2.document.spec.QuerySpec;
 import com.amazonaws.services.dynamodbv2.document.utils.ValueMap;
 import com.amazonaws.services.dynamodbv2.model.AttributeDefinition;
 import com.amazonaws.services.dynamodbv2.model.KeySchemaElement;
 import com.amazonaws.services.dynamodbv2.model.KeyType;
+import com.amazonaws.services.dynamodbv2.model.KeysAndAttributes;
 import com.amazonaws.services.dynamodbv2.model.ProvisionedThroughput;
 import com.amazonaws.services.dynamodbv2.model.ScalarAttributeType;
 import com.google.common.collect.EvictingQueue;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.MinMaxPriorityQueue;
 
 import com.sleepycat.json_simple.JsonArray;
@@ -86,17 +91,21 @@ public class SearchHandler implements Route {
 	
 	private Table pageRankTable;
 	
+	
 	private Table docTable;
 	
 	private int maxToQueryLimit;
 	
 	private int maxToShowLimit = 10;
 	
-	public SearchHandler(Table indexDb, int maxQueryLimit, Table pageRankTable, Table docTable) {
+	private DynamoDB dynamoDB;
+	
+	public SearchHandler(Table indexDb, int maxQueryLimit, Table pageRankTable, Table docTable, DynamoDB dynamoDB) {
 		this.indexDb = indexDb;
 		this.maxToQueryLimit = maxQueryLimit;
 		this.pageRankTable = pageRankTable;
 		this.docTable = docTable;
+		this.dynamoDB = dynamoDB;
 	}
 	
 	public double getPageRankScore(String doc_id) {
@@ -138,7 +147,14 @@ public class SearchHandler implements Route {
 		JsonArray returnJson = new JsonArray();
 		logger.info(docIdToItem.keySet().size());
 		// go through every docId, and get the ranking
+		
+		Map<String,Double> mapOfScores = batchGet(docIdToItem.keySet());
+		int missed = 0;
+		// this docId should be the intersection
 		for (String docId : docIdToItem.keySet()) {
+			
+			logger.info("here");
+			
 			ArrayList<DocIdToIdf> docToTerms = docIdToItem.get(docId);
 			double itemScore = 0;
 			
@@ -150,7 +166,12 @@ public class SearchHandler implements Route {
 			}
 			
 			// add pageRank
-			double pgScore = getPageRankScore(docId);
+			if (mapOfScores.get(docId) == null) {
+				missed++;
+				continue;
+			}
+			
+			double pgScore = mapOfScores.get(docId);
 			
 			itemScore += pgScore;
 			
@@ -186,6 +207,7 @@ public class SearchHandler implements Route {
 		
 		List<String> toReverse = new ArrayList<String>();
 		
+		
 		for (int i = 0 ; i < maxToShowLimit; i++) {
 			
 			SearchResult sresult = q.poll();
@@ -204,6 +226,8 @@ public class SearchHandler implements Route {
 			
 //			returnJson.add(it.toJSON());
 		}
+		
+		logger.error("Elements not in the returned batch: " + missed);
 		
 		Collections.reverse(toReverse);
 		
@@ -233,11 +257,14 @@ public class SearchHandler implements Route {
 		String query = request.queryParams("q");
 		
 		logger.info("Sent query " + query);
+		String queryAnswer = queryNewSchema(query);
 		try {
-			String queryAnswer = queryNewSchema(query);
+//			String queryAnswer = queryNewSchema(query);
 			return queryAnswer;
 		} catch (Exception e) {
 			JsonArray returnJson = new JsonArray();
+			logger.error("OUT HERE");
+			logger.error(e);
 			return returnJson.toJson();
 		}
 	}
@@ -306,6 +333,7 @@ public class SearchHandler implements Route {
 			
 			List<Map<String, Object>> docIdsList = indexItem.getList("docList");
 			
+			
 			for (Map<String, Object> o : docIdsList) {
 				logger.debug(o.toString());
 				String doc_id = (String) o.get("docid");
@@ -338,6 +366,134 @@ public class SearchHandler implements Route {
 		
 		return output;
 	}
+	
+	/**
+	 * Need to batch into sets of 100 for the 
+	 * @param doc_ids
+	 * @return
+	 */
+	private Map<String, Double> batchGet(Set<String> doc_ids) {
+		
+		Map<String, Double> toReturn = new HashMap<String, Double>();
+		
+        try {
+            
+            Iterable<List<String>> lists = Iterables.partition(doc_ids, 100);
+            
+            for (List<String> l : lists) {
+            	String tableName = this.pageRankTable.getTableName();
+                TableKeysAndAttributes forumTableKeysAndAttributes = new TableKeysAndAttributes(tableName)
+						.withAttributeNames("doc_id", "rank");
+				forumTableKeysAndAttributes.withAttributeNames("doc_id", "rank");
+				
+				
+            	for (String id : l) {
+            		forumTableKeysAndAttributes.addHashOnlyPrimaryKeys("doc_id", id);
+            	}
+                
+                BatchGetItemOutcome outcome = dynamoDB.batchGetItem(forumTableKeysAndAttributes);
+                
+                Map<String, KeysAndAttributes> unprocessed = null;
+                
+                do {
+                    List<Item> items = outcome.getTableItems().get(tableName);
+                    for (Item item : items) {
+                        String returnId = item.getString("doc_id");
+                        
+                		BigDecimal pageScore = (BigDecimal) item.get("rank");
+                		
+                		toReturn.put(returnId, pageScore.doubleValue());
+//                		logger.trace("put id " + returnId + " wiht val of " + pageScore);
+                    }
+                    
+                
+                    // Check for unprocessed keys which could happen if you exceed
+                    // provisioned
+                    // throughput or reach the limit on response size.
+                    unprocessed = outcome.getUnprocessedKeys();
+
+                    if (unprocessed.isEmpty()) {
+                        logger.trace("No unprocessed keys found");
+                    }
+                    else {
+                        System.out.println("Retrieving the unprocessed keys");
+                        outcome = dynamoDB.batchGetItemUnprocessed(unprocessed);
+                    }
+                } while (!unprocessed.isEmpty());
+            }
+        }
+        
+        catch (Exception e) {
+            System.err.println("Failed to retrieve items.");
+            System.err.println(e.getMessage());
+        }
+        
+		return toReturn;
+
+    }
+	
+	/**
+	 * Need to batch into sets of 100 for the 
+	 * @param doc_ids
+	 * @return
+	 */
+	private Map<String, Item> batchGetFromDocTable(Set<String> doc_ids) {
+		
+		Map<String, Item> toReturn = new HashMap<String, Item>();
+		
+        try {
+            
+            Iterable<List<String>> lists = Iterables.partition(doc_ids, 100);
+            
+            for (List<String> l : lists) {
+            	String tableName = this.docTable.getTableName();
+                TableKeysAndAttributes forumTableKeysAndAttributes = new TableKeysAndAttributes(tableName)
+						.withAttributeNames("id");
+				forumTableKeysAndAttributes.withAttributeNames("id", "docExcerpt", "domain", "title", "url");
+				
+				
+            	for (String id : l) {
+            		forumTableKeysAndAttributes.addHashOnlyPrimaryKeys("id", id);
+            	}
+                
+                BatchGetItemOutcome outcome = dynamoDB.batchGetItem(forumTableKeysAndAttributes);
+                
+                Map<String, KeysAndAttributes> unprocessed = null;
+                
+                do {
+                    List<Item> items = outcome.getTableItems().get(tableName);
+                    for (Item item : items) {
+                        String returnId = item.getString("id");
+                		
+                		toReturn.put(returnId, item);
+//                		logger.trace("put id " + returnId + " wiht val of " + pageScore);
+                    }
+                    
+                
+                    // Check for unprocessed keys which could happen if you exceed
+                    // provisioned
+                    // throughput or reach the limit on response size.
+                    unprocessed = outcome.getUnprocessedKeys();
+
+                    if (unprocessed.isEmpty()) {
+                        logger.trace("No unprocessed keys found");
+                    }
+                    else {
+                        System.out.println("Retrieving the unprocessed keys");
+                        outcome = dynamoDB.batchGetItemUnprocessed(unprocessed);
+                    }
+                } while (!unprocessed.isEmpty());
+            }
+        }
+        
+        catch (Exception e) {
+            System.err.println("Failed to retrieve items.");
+            System.err.println(e.getMessage());
+        }
+        
+		return toReturn;
+
+    }
 	
 }
 
