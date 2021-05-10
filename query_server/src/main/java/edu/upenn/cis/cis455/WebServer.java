@@ -2,6 +2,7 @@ package edu.upenn.cis.cis455;
 import static spark.Spark.*;
 
 
+
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -31,8 +32,9 @@ public class WebServer {
         
         Spark.port(port);
         
-        
         String tableName = args[1];
+        
+        int maxLimitReturn = Integer.parseInt(args[2]);
         
         ProfileCredentialsProvider credentialsProvider = new ProfileCredentialsProvider();
         try {
@@ -56,7 +58,7 @@ public class WebServer {
         
         get("/hello", (request, response) -> "world");
         
-        get("/search", new SearchHandler(table));
+        get("/search", new SearchHandler(table, maxLimitReturn));
         
         get("/shutdown", (request, response) -> {
         	stop();
