@@ -4,6 +4,8 @@ import Search from './Search';
 import Results from './Results';
 import { RESULTS } from '../constants/mockResults';
 
+const SERVER_URL = 'http://ec2-100-26-9-51.compute-1.amazonaws.com:45555/';
+
 const darkTheme = createMuiTheme({
   palette: {
     type: 'dark',
@@ -17,7 +19,7 @@ const App = () => {
   const fetchSearchResults = async q => {
     // REAL CODE
     setIsLoading(true);
-    const response = await fetch(`/search?` + new URLSearchParams({ q }));
+    const response = await fetch(`${SERVER_URL}/search?` + new URLSearchParams({ q }));
     let queryResults = await response.json();
     queryResults = queryResults.map(item => JSON.parse(item));
     // console.log(queryResults);
