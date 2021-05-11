@@ -2,6 +2,7 @@
   "name": "frontend",
   "version": "0.1.0",
   "private": true,
+  "proxy": "http://ec2-100-26-9-51.compute-1.amazonaws.com:45555/",
   "dependencies": {
     "@material-ui/core": "^4.11.4",
     "@material-ui/icons": "^4.11.2",
@@ -11,7 +12,6 @@
     "react": "^17.0.2",
     "react-dom": "^17.0.2",
     "react-scripts": "4.0.3",
-    "reactstrap": "^8.9.0",
     "web-vitals": "^1.0.1"
   },
   "scripts": {
