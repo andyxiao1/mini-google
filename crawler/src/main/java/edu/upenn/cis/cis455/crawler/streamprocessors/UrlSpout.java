@@ -106,6 +106,11 @@ public class UrlSpout implements IRichSpout {
             return true;
         }
 
+        if (!isValidUrl(url)) {
+            logger.debug(url + ": doesn't pass url filter");
+            return true;
+        }
+
         // Note: We are tracking access times by when the url gets emitted, so no two
         // urls for a domain will be emitted within the crawl-delay, there may be some
         // conditions where this doesn't work.
@@ -170,6 +175,17 @@ public class UrlSpout implements IRichSpout {
                 return false;
             }
         }
+        return true;
+    }
+
+    private boolean isValidUrl(String link) {
+        if (link.contains("wiki") && !link.contains("en.wikipedia")) {
+            return false;
+        }
+        if (link.contains("wordpress") || link.contains("stackexchange") || link.contains("tumblr")) {
+            return false;
+        }
+
         return true;
     }
 }

@@ -16,7 +16,7 @@ public class FairTaskQueue {
 
     Queue<ClassQueue<ITask>> fairTaskQueue = new ConcurrentLinkedQueue<ClassQueue<ITask>>();
     Map<String, ClassQueue<ITask>> fairTaskMap = new ConcurrentHashMap<String, ClassQueue<ITask>>();
-    int linkFilterRemaining = 15;
+    int linkFilterRemaining = 10;
 
     public class ClassQueue<T> extends ConcurrentLinkedQueue<T> {
 

@@ -1,38 +1,80 @@
-export const RESULTS =
-	[
-			{
-				title: 'Aizawl',
-				url: 'https://www.google.com',
-				text: 'Aizawl is a beautiful place that offers plenty of tourist attractions to tourists and habitants alike. Besides its breathtaking beauty, Aizawl is the storehouse of all important Government offices, State Assembly House and Civil Secretariat. It also enhouses different communities of Mizo wherein they maintain Peaceful Coexistence as the main theme. Various varieties of jungle products, monuments and memorials connected with legends and folklores are also available. This lively and bustling city is definitely enchanting and worth visiting.',
-			},{
-        title: 'Adam',
-				url: 'www.adam.com',
-				text: 'Aizawl is a beautiful place that offers plenty of tourist attractions to tourists and habitants alike. Besides its breathtaking beauty, Aizawl is the storehouse of all important Government offices, State Assembly House and Civil Secretariat. It also enhouses different communities of Mizo wherein they maintain Peaceful Coexistence as the main theme. Various varieties of jungle products, monuments and memorials connected with legends and folklores are also available. This lively and bustling city is definitely enchanting and worth visiting.',
-			},{
-        title: 'Adam',
-				url: 'www.adam.com',
-				text: 'Aizawl is a beautiful place that offers plenty of tourist attractions to tourists and habitants alike. Besides its breathtaking beauty, Aizawl is the storehouse of all important Government offices, State Assembly House and Civil Secretariat. It also enhouses different communities of Mizo wherein they maintain Peaceful Coexistence as the main theme. Various varieties of jungle products, monuments and memorials connected with legends and folklores are also available. This lively and bustling city is definitely enchanting and worth visiting.',
-			},
-      ,{
-        title: 'Adam',
-				url: 'www.adam.com',
-				text: 'Aizawl is a beautiful place that offers plenty of tourist attractions to tourists and habitants alike. Besides its breathtaking beauty, Aizawl is the storehouse of all important Government offices, State Assembly House and Civil Secretariat. It also enhouses different communities of Mizo wherein they maintain Peaceful Coexistence as the main theme. Various varieties of jungle products, monuments and memorials connected with legends and folklores are also available. This lively and bustling city is definitely enchanting and worth visiting.',
-			},
-      {
-        title: 'Adam',
-				url: 'www.adam.com',
-				text: 'Aizawl is a beautiful place that offers plenty of tourist attractions to tourists and habitants alike. Besides its breathtaking beauty, Aizawl is the storehouse of all important Government offices, State Assembly House and Civil Secretariat. It also enhouses different communities of Mizo wherein they maintain Peaceful Coexistence as the main theme. Various varieties of jungle products, monuments and memorials connected with legends and folklores are also available. This lively and bustling city is definitely enchanting and worth visiting.',
-			},{
-        title: 'Adam',
-				url: 'www.adam.com',
-				text: 'Aizawl is a beautiful place that offers plenty of tourist attractions to tourists and habitants alike. Besides its breathtaking beauty, Aizawl is the storehouse of all important Government offices, State Assembly House and Civil Secretariat. It also enhouses different communities of Mizo wherein they maintain Peaceful Coexistence as the main theme. Various varieties of jungle products, monuments and memorials connected with legends and folklores are also available. This lively and bustling city is definitely enchanting and worth visiting.',
-			},{
-        title: 'Adam',
-				url: 'www.adam.com',
-				text: 'Aizawl is a beautiful place that offers plenty of tourist attractions to tourists and habitants alike. Besides its breathtaking beauty, Aizawl is the storehouse of all important Government offices, State Assembly House and Civil Secretariat. It also enhouses different communities of Mizo wherein they maintain Peaceful Coexistence as the main theme. Various varieties of jungle products, monuments and memorials connected with legends and folklores are also available. This lively and bustling city is definitely enchanting and worth visiting.',
-			},{
-        title: 'Adam',
-				url: 'www.adam.com',
-				text: 'Aizawl is a beautiful place that offers plenty of tourist attractions to tourists and habitants alike. Besides its breathtaking beauty, Aizawl is the storehouse of all important Government offices, State Assembly House and Civil Secretariat. It also enhouses different communities of Mizo wherein they maintain Peaceful Coexistence as the main theme. Various varieties of jungle products, monuments and memorials connected with legends and folklores are also available. This lively and bustling city is definitely enchanting and worth visiting.',
-			}
-	];
+import React from 'react';
+import { makeStyles } from '@material-ui/core/styles';
+import Loader from './Loader';
+import List from '@material-ui/core/List';
+import Container from '@material-ui/core/Container';
+import ListItem from '@material-ui/core/ListItem';
+import Divider from '@material-ui/core/Divider';
+import ListItemText from '@material-ui/core/ListItemText';
+import Typography from '@material-ui/core/Typography';
+
+const useStyles = makeStyles(theme => ({
+  container: {
+    marginLeft: 180,
+    flex: 1,
+    display: 'flex',
+  },
+  list: {
+    marginTop: theme.spacing(1),
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: 20,
+    borderRadius: 3,
+    width: '100%',
+  },
+  loader: {
+    marginTop: -theme.spacing(16),
+    zoom: 0.5,
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    transform: 'translate(-50%)',
+  },
+  title: { color: '#42a9db' },
+  url: { color: '#0c942e' },
+}));
+
+const Results = ({ results, isLoading }) => {
+  const classes = useStyles();
+
+  if (!isLoading && (!results || results.length === 0)) {
+    return null;
+  }
+
+  const resultslist = results.map((result, i) => {
+    return (
+      <div key={i}>
+        <ListItem alignItems="flex-start" button component="a" href={result.url}>
+          <ListItemText
+            primary={
+              <>
+                <Typography variant="h6" className={classes.title}>
+                  {result.title.slice(0, 61)}
+                </Typography>
+                <Typography variant="subtitle1" className={classes.url}>
+                  {result.url}
+                </Typography>
+              </>
+            }
+            secondary={result.docExcerpt}
+          />
+        </ListItem>
+        <Divider variant="fullWidth" component="li" />
+      </div>
+    );
+  });
+
+  return (
+    <Container className={classes.container} maxWidth={'md'}>
+      {isLoading ? (
+        <div className={classes.loader}>
+          <Loader />
+        </div>
+      ) : (
+        <List className={classes.list}>{resultslist}</List>
+      )}
+    </Container>
+  );
+};
+
+export default Results;

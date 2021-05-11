@@ -3,3 +3,4 @@
 hiveCommands.txt
 frontend/node_modules
 crawler/db
+invertedIndex/*.csv
