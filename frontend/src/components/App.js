@@ -18,15 +18,16 @@ const App = () => {
     // REAL CODE
     setIsLoading(true);
     const response = await fetch(`/search?` + new URLSearchParams({ q }));
-    const queryResults = await response.json();
-    console.log(queryResults);
+    let queryResults = await response.json();
+    queryResults = queryResults.map(item => JSON.parse(item));
+    // console.log(queryResults);
     setResults(queryResults);
     setIsLoading(false);
 
     // TESTING CODE
     // setIsLoading(true);
     // setTimeout(() => {
-    //   const queryResults = RESULTS;
+    //   const queryResults = RESULTS.map(item => JSON.parse(item));
     //   setResults(queryResults);
     //   setIsLoading(false);
     // }, 2000);
