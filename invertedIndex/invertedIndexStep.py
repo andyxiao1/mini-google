@@ -7,7 +7,8 @@ from math import log
 from urllib2 import HTTPError
 from pyspark.sql import functions as F
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, udf, lit
+from pyspark.sql.functions import col, udf, lit, sort_array, collect_list, struct
+from pyspark.sql import functions as F
 from pyspark.sql.types import DoubleType
 from bs4 import BeautifulSoup
 from bs4.element import Comment
@@ -121,7 +122,18 @@ def create_sdf_with_flattened_term_freq(sdf):
 def _log_udf(numDocuments, s):
     return log(numDocuments, 2) - log(s, 2)
 
-def calculate_inverted_index(output_path, raw_sdf, spark):
+def split_doc_list(row):
+    n = 2500
+    doc_list = row["doc_list"]
+    res = []
+    rank = 1
+    for i in range(0, len(doc_list), n):
+        res.append((row["word"], row["idf"], rank, doc_list[i:i+n]))
+        rank += 1
+        
+    return res    
+
+def calculate_inverted_index(output_path_raw, output_path_list, raw_sdf, spark):
     """
     Args:
         raw_sdf -> sdf read from input csv
@@ -153,17 +165,26 @@ def calculate_inverted_index(output_path, raw_sdf, spark):
     combined_tf_with_idf_count_df = spark.sql('''SELECT r.word, r.docid as docid, normalized_tf, tf, corpus_freq, idfCount FROM tfNormalizedTable r JOIN idfCount i ON r.word = i.word''')    
     log_udf = udf(_log_udf, DoubleType())
     final = combined_tf_with_idf_count_df.withColumn("idf", log_udf(lit(num_documents), col("idfCount"))).withColumn("tfIdf", col("idf") * col("normalized_tf"))
-    final.write.parquet(output_path)
-    return final
+    final.write.parquet(output_path_raw)
+
+    final_with_lists = final.groupBy("word").agg(
+        F.max("idf").alias("idf"),
+        sort_array(collect_list(struct("tfIdf", "docid")), False).alias("doc_list")
+    )
+    final_with_split_lists = final_with_lists.rdd.flatMap(split_doc_list).toDF(["word", "idf", "rank", "docList"])
+    final_with_split_lists.write.parquet(output_path_list)
+    return final_with_split_lists
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '--output_path', help="The path where the final inverted index will be written!")
+        '--output_path_raw', help="The path where the final raw inverted index will be written!")
+    parser.add_argument(
+        '--output_path_list', help="The path where the final inverted index will be written!")        
     args = parser.parse_args()
     with SparkSession.builder.appName("Inverted index").getOrCreate() as spark:
-        s3_sample_input_path = 's3://555finalproject/invertedIndexUtilities/crawlInput.csv'
+        s3_sample_input_path = 's3://555finalproject/invertedIndexUtilities/crawlInputFinal.csv'
         sdf = spark.read.option("header", "true").option("quote", "\"").option("escape", "\"").csv(s3_sample_input_path)
-        calculate_inverted_index(args.output_path, sdf, spark)
+        calculate_inverted_index(args.output_path_raw, args.output_path_list, sdf, spark)
 

@@ -67,6 +67,11 @@ def process_s3_files(filename, readFromFile=False):
             except ClientError as ex:
                 continue
 
+    write_file_to_s3("crawlInputFinal")
+
+def write_file_to_s3(filename):
+    s3 = boto3.resource('s3',aws_access_key_id='AKIAZOHLA4EYU4BHGTX3', aws_secret_access_key='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', region_name='us-east-1')
+    s3.meta.client.upload_file(f'{filename}.csv', '555finalproject', f'invertedIndexUtilities/{filename}.csv')
 
 def get_data_from_dynamodb():
     dynamodb = boto3.resource('dynamodb',aws_access_key_id='AKIAZOHLA4EYU4BHGTX3', aws_secret_access_key='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', region_name='us-east-1')
@@ -82,6 +87,21 @@ def get_data_from_dynamodb():
 
     #write_csv_file("test.csv", data)
 
+def count_num_rows_in_dynamodb():
+    dynamodb = boto3.resource('dynamodb',aws_access_key_id='AKIAZOHLA4EYU4BHGTX3', aws_secret_access_key='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', region_name='us-east-1')
+    inv_index = dynamodb.Table('inverted_index_final')
+    response = inv_index.scan()
+    data = response['Items']
+    count = len(data)
+    # paginate response
+    while response.get('LastEvaluatedKey'):
+        response = inv_index.scan(ExclusiveStartKey=response['LastEvaluatedKey'])
+        count += len(response['Items'])
+
+    return count
+
 if __name__ == "__main__":
     #get_data_from_dynamodb()
-    process_s3_files("crawlInput.csv", True)
+    #process_s3_files("crawlInputFinal.csv", True)
+    #write_file_to_s3("uniqueDocnames")
+    print(f"{count_num_rows_in_dynamodb()} rows")
