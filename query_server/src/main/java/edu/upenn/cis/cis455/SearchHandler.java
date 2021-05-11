@@ -137,7 +137,7 @@ public class SearchHandler implements Route {
 		return sb.toString();
 	}
 
-	private String computeRanking(Map<String, ArrayList<DocIdToIdf>> docIdToItem, Map<String, Double> queryWeightMap) {
+	private String computeRanking(Set<String> sharedDocIds, Map<String, ArrayList<DocIdToIdf>> docIdToItem, Map<String, Double> queryWeightMap) {
 		
         // Creating empty priority queue
 //		PriorityQueue<SearchResult> q = PriorityQueue.maximumSize(maxToShowLimit).create();
@@ -145,13 +145,13 @@ public class SearchHandler implements Route {
 		
 		// make a json array to send
 		JsonArray returnJson = new JsonArray();
-		logger.info(docIdToItem.keySet().size());
+		logger.info(sharedDocIds.size());
 		// go through every docId, and get the ranking
 		
-		Map<String,Double> mapOfScores = batchGet(docIdToItem.keySet());
+		Map<String,Double> mapOfScores = batchGet(sharedDocIds);
 		int missed = 0;
 		// this docId should be the intersection
-		for (String docId : docIdToItem.keySet()) {
+		for (String docId : sharedDocIds) {
 			
 			logger.info("here");
 			
@@ -297,14 +297,19 @@ public class SearchHandler implements Route {
 		// query items multiplied by idf
 		Map<String, Double> queryWeightMap = new HashMap<String, Double>();
 		
+		Set<String> sharedDocIds = new HashSet<String>();
+		Set<String> currTermDocIds = new HashSet<String>();
+		
 		int rankSearch = 1;
 		
 		// outer loop is for every term in the query
 		for (int i = 0; i < terms.size(); i++) {
 			String t = terms.get(i);
 			
-			// TODO: fix this ranking? 
+			// TODO: fix this ranking for pagination on the rankSearch
 			GetItemSpec spec = new GetItemSpec().withPrimaryKey("word", t, "rank", rankSearch);
+			
+			currTermDocIds.clear();
 			
 			Item indexItem = indexDb.getItem(spec);
 			
@@ -341,6 +346,8 @@ public class SearchHandler implements Route {
 				double tfIdf = tfBig.doubleValue();
 				logger.debug("TFIDF: " + tfIdf);
 				
+				currTermDocIds.add(doc_id);
+				
 				// for every document for this term, create a new item here
 				DocIdToIdf insert = new DocIdToIdf(doc_id, tfIdf, t);
 				
@@ -354,6 +361,13 @@ public class SearchHandler implements Route {
 					docIdToItem.get(doc_id).add(insert);
 				}
 			}
+			
+			if (i == 0) {
+				sharedDocIds = currTermDocIds;
+				currTermDocIds = new HashSet<String>();
+			} else {
+				sharedDocIds.retainAll(currTermDocIds);
+			}
 		}
 		
 		logger.debug("Query map: " + prettyQueryMap(queryWeightMap));
@@ -362,7 +376,7 @@ public class SearchHandler implements Route {
 		
 		logger.info("Done here");
 		
-		String output = computeRanking(docIdToItem, queryWeightMap);
+		String output = computeRanking(sharedDocIds, docIdToItem, queryWeightMap);
 		
 		return output;
 	}

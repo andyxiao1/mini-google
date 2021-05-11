@@ -60,7 +60,7 @@ public class TestLemmas {
 		
         Table docTable = dynamoDB.getTable("documents-final");
 		
-		SearchHandler s = new SearchHandler(table, maxLimitReturn, pageRankTable, docTable);
+		SearchHandler s = new SearchHandler(table, maxLimitReturn, pageRankTable, docTable, dynamoDB);
 		
 		double ans = s.getPageRankScore("02d1add998e02a74054a23c103a9deb5");
 		
@@ -98,7 +98,7 @@ public class TestLemmas {
 		
         Table docTable = dynamoDB.getTable("documents-final");
 		
-		SearchHandler s = new SearchHandler(table, maxLimitReturn, pageRankTable, docTable);
+		SearchHandler s = new SearchHandler(table, maxLimitReturn, pageRankTable, docTable, dynamoDB);
 		
 		double ans = s.getPageRankScore("not_here");
 		
