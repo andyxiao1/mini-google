@@ -153,8 +153,6 @@ public class SearchHandler implements Route {
 		// this docId should be the intersection
 		for (String docId : sharedDocIds) {
 			
-			logger.info("here");
-			
 			ArrayList<DocIdToIdf> docToTerms = docIdToItem.get(docId);
 			double itemScore = 0;
 			
