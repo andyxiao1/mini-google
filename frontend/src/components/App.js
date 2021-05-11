@@ -14,21 +14,22 @@ const App = () => {
   const [results, setResults] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const fetchSearchResults = async query => {
+  const fetchSearchResults = async q => {
     // REAL CODE
-    // setIsLoading(true);
-    // const response = await fetch(`/search?q=${query}`);
-    // const queryResults = await response.json();
-    // setResults(queryResults);
-    // setIsLoading(false);
+    setIsLoading(true);
+    const response = await fetch(`/search?` + new URLSearchParams({ q }));
+    const queryResults = await response.json();
+    console.log(queryResults);
+    setResults(queryResults);
+    setIsLoading(false);
 
     // TESTING CODE
-    setIsLoading(true);
-    setTimeout(() => {
-      const queryResults = RESULTS;
-      setResults(queryResults);
-      setIsLoading(false);
-    }, 2000);
+    // setIsLoading(true);
+    // setTimeout(() => {
+    //   const queryResults = RESULTS;
+    //   setResults(queryResults);
+    //   setIsLoading(false);
+    // }, 2000);
   };
 
   return (
